@@ -27,6 +27,5 @@ export default initialState => {
       store.replaceReducer(require('../reducers').default);
     });
   }
-
   return store;
 };
