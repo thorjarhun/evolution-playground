@@ -328,14 +328,11 @@ const EXPAND_GENE_OBJECT = 'EXPAND_GENE_OBJECT';
 export const generationObject = makeActionCreator(GENERATION_OBJECT);
 const evaluateFitnessObject = makeActionCreator(EVALUATE_FITNESS_OBJECT);
 const sortOnFitnessObject = makeActionCreator(SORT_ON_FITNESS_OBJECT);
-const evalIndividualObject = makeActionCreator(EVAL_INDIVUDUAL_OBJECT, 'index');
+const evalIndividualObject = makeActionCreator(EVAL_INDIVUDUAL_OBJECT);
 const pauseObject = makeActionCreator(PAUSE_OBJECT);
 const setStateObject = makeActionCreator(SET_STATE_OBJECT, 'mutation');
-const moveIndividualObject = makeActionCreator(MOVE_INDIVIDUAL_OBJECT, 'index', 'destination');
-const moveIndividualBackHomeObject = makeActionCreator(MOVE_INDIVIDUAL_BACK_HOME_OBJECT, 'index', 'showFitness')
+const moveIndividualBackHomeObject = makeActionCreator(MOVE_INDIVIDUAL_BACK_HOME_OBJECT, 'index', 'showFitness');
 const checkForIcObject = makeActionCreator(CHECK_FOR_IC_OBJECT, 'index');
-const assignFitnessObject = makeActionCreator(ASSIGN_FITNESS_OBJECT, 'index');
-const drawIndividualObject = makeActionCreator(DRAW_INDIVIDUAL_OBJECT, 'index');
 const checkThresholdObject = makeActionCreator(CHECK_THRESHOLD_OBJECT);
 const purgeObject = makeActionCreator(PURGE_OBJECT);
 const crossoverObject = makeActionCreator(CROSSOVER_OBJECT, 'index', 'ppr');
@@ -398,7 +395,13 @@ const animationReducer = createReducer(null, {
 			})),
 			range(POPULATION_SIZE).slice(state.generation === 1 ? 0 : parentPickRange(state.individuals))
 				.reverse()
-				.map(evalIndividualObject),
+				.reduce((a, i) => a.concat(
+					evalIndividualObject(),
+					setStateObject(state => ({
+						...state,
+						currentIndividual: i
+					})),
+				), []),
 			setStateObject(augmenter({
 				collectedPoints: 0,
 				mStack: append(
@@ -410,6 +413,39 @@ const animationReducer = createReducer(null, {
 				)
 			}))
 		)
+	}),
+	[EVAL_INDIVUDUAL_OBJECT]: state => ({
+		...state,
+		mStack: [...state.mStack,
+			moveIndividualBackHomeObject(state.currentIndividual, true),
+			setStateObject(augmentWith({collectedPoints: 0})),
+			checkForIcObject(state.currentIndividual),
+			setStateObject(state => ({
+				...state,
+				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
+					...individual,
+					visible: true,
+					showFitness: true,
+					fitness: state.collectedPoints - individual.DNA.xs.length
+				}))
+			})),
+			setStateObject(state => ({
+				...state,
+				individuals: replaceAtIndex(state.individuals, state.currentIndividual, augmentWith({
+					visible: true
+				})),
+				boxes: loadDNA(state.individuals[state.currentIndividual].DNA),
+				collectedPoints: 0,
+				balls: [createStartBall(state.speed, state.initialBallValue)]
+			})),
+			setStateObject(state => ({
+				...state,
+				individuals: replaceAtIndex(state.individuals, state.currentIndividual, augmentWith({
+					destination: individualInGamePoint(),
+					progress: 0
+				}))
+			}))
+		]
 	}),
   [PURGE_OBJECT]: state => {
     const ppr = parentPickRange(state.individuals);
@@ -695,7 +731,7 @@ const animationReducer = createReducer(null, {
     message: 'SORT POPULATION',
     individuals: individuals => sortOnFitness(individuals).map((individual, i) => ({
 	    ...individual,
-	    destination: positionForIndividual(i, POPULATION_SIZE),
+	    destination: positionForIndividual(i),
 	    progress: 0
     }))
   }),
@@ -706,49 +742,12 @@ const animationReducer = createReducer(null, {
     activeList: [...state.activeList, pauseEffect(25)]
   }),
 */
-  [EVAL_INDIVUDUAL_OBJECT]: (state, { index }) => ({
-    ...state,
-	  currentIndividual: index, // TODO: Re-implement everything to use this
-    mStack: [...state.mStack,
-      moveIndividualBackHomeObject(index, true),
-      setStateObject(augmentWith({collectedPoints: 0})),
-      checkForIcObject(index),
-      assignFitnessObject(index),
-      drawIndividualObject(index),
-      moveIndividualObject(index, individualInGamePoint())
-    ]
-  }),
-  [MOVE_INDIVIDUAL_OBJECT]: (state, { index, destination }) => ({
-    ...state,
-    individuals: replaceAtIndex(state.individuals, index, augmentWith({
-	    destination,
-	    progress: 0
-    }))
-  }),
   [MOVE_INDIVIDUAL_BACK_HOME_OBJECT]: (state, { index, showFitness }) => ({
     ...state,
     individuals: replaceAtIndex(state.individuals, index, augmentWith({
-	    destination: positionForIndividual(index, POPULATION_SIZE),
+	    destination: positionForIndividual(index),
 	    progress: 0,
       showFitness
-    }))
-  }),
-  [DRAW_INDIVIDUAL_OBJECT]: (state, { index }) => ({
-    ...state,
-	  individuals: replaceAtIndex(state.individuals, index, augmentWith({
-		  visible: true
-	  })),
-    boxes: loadDNA(state.individuals[index].DNA),
-    collectedPoints: 0,
-    balls: [createStartBall(state.speed, state.initialBallValue)]
-  }),
-  [ASSIGN_FITNESS_OBJECT]: (state, { index }) => ({
-    ...state,
-    individuals: replaceAtIndex(state.individuals, index, individual => ({
-      ...individual,
-	    visible: true,
-      showFitness: true,
-      fitness: state.collectedPoints - individual.DNA.xs.length
     }))
   })
 });
@@ -837,9 +836,9 @@ const xoverChildPoint = () => ({
   y: (xoverParent1Point().y + xoverParent2Point().y) / 2
 });
 
-const positionForIndividual = (index, populationSize) => {
-  const ySpacing = SVG_HEIGHT * 2 / populationSize;
-  if (index < populationSize / 2) {
+const positionForIndividual = index => {
+  const ySpacing = SVG_HEIGHT * 2 / POPULATION_SIZE;
+  if (index < POPULATION_SIZE / 2) {
     return {
       x: 0,
       y: ySpacing * index
@@ -918,8 +917,8 @@ const checkFitness = individual => Math.max(0, play(individual) - individualLeng
 const individualByFitness = comparator((a, b) => checkFitness(a) < checkFitness(b));
 
 export const generateInitialPopulation = () => range(POPULATION_SIZE).map(i => {
-  const location = positionForIndividual(i, POPULATION_SIZE);
-  const destination = positionForIndividual(i, POPULATION_SIZE);
+  const location = positionForIndividual(i);
+  const destination = positionForIndividual(i);
   return head(range(6).map(generateIndividual(location, destination)).sort(individualByFitness));
 }).sort(individualByFitness);
 
