@@ -32,33 +32,201 @@ import {
   CROSSOVER_RATE
 } from '../constants/game';
 
+
+const dropBallEffectFn = (state, index) => {
+	const ball = {...state.balls[index]};
+	if (ball.row >= ROWS + 2) {
+		return state;
+	}
+	ball.progress += getInitialProgressIncrement(state.speed);
+	if (ball.progress >= 1) {
+		var points = 0;
+		const balls = ballStepComplete(state, index, true).map($ball => {
+			if ($ball.row > ROWS) {
+				points += $ball.column === BALL_COLLECTION_COLUMN ? $ball.value : -PENALTY_POINTS;
+				return {
+					...$ball,
+					dead: true
+				};
+			}
+			return $ball;
+		});
+		return {
+			...state,
+			balls: replaceAtIndex(state.balls, index, balls[0]).concat(balls[1] || []),
+			collectedPoints: state.collectedPoints + points
+		};
+	}
+	return {
+		...state,
+		balls: replaceAtIndex(state.balls, index, ball)
+	};
+};
+
+const ballStepComplete = (state, index, animate) => {
+	const ball = {...state.balls[index]};
+	const {row, column} = ball;
+	const balls = moveBall({
+		boxType: getBoxType(state.boxes, row, column),
+		ball
+	});
+
+	if (animate) {
+		return balls.map(ball => startNextAnimation({
+			ball,
+			row,
+			column
+		}));
+	}
+	return balls;
+};
+
+const startNextAnimation = ({ball, row, column}) => ({
+	...ball,
+	location: pointInPlayground(row, column),
+	destination: pointInPlayground(ball.row, ball.column),
+	progress: 0
+});
+
+const getBoxType = (boxes, row, column) => {
+	if (row >= 0 && row < ROWS) {
+		const box = boxes[row][column];
+		return box && 'ALRS'[box.type];
+	}
+};
+
+/* This will return an object like:
+ [...balls]
+ */
+
+const moveBall = ({boxType, ball}) => {
+	const updaters = {
+		A: ball => ball,
+		L: ball => ball,
+		R: ball => ball,
+		S: ball => ball
+	};
+
+	const makeNewBall = ball => ({
+		...ball,
+		dead: false
+	});
+	var newBall;
+	switch (boxType) {
+		case 'A':
+			ball.value++;
+			if (ball.direction === DIRECTION.DOWN) {
+				ball.row++;
+			} else if (ball.direction === DIRECTION.RIGHT) {
+				ball.column++;
+				if (ball.column >= COLUMNS) {
+					ball.column--;
+					ball.row++;
+					ball.direction = DIRECTION.DOWN;
+				}
+			} else {
+				ball.column--;
+				if (ball.column < 0) {
+					ball.column++;
+					ball.row++;
+					ball.direction = DIRECTION.DOWN;
+				}
+			}
+			break;
+		case 'L':
+			if (ball.direction === DIRECTION.DOWN) {
+				ball.column++;
+				ball.direction = DIRECTION.RIGHT;
+				if (ball.column >= COLUMNS) {
+					ball.column--;
+					ball.row++;
+					ball.direction = DIRECTION.DOWN;
+				}
+			} else {
+				ball.row++;
+				ball.direction = DIRECTION.DOWN;
+			}
+			break;
+		case 'R':
+			if (ball.direction === DIRECTION.DOWN) {
+				ball.column--;
+				ball.direction = DIRECTION.LEFT;
+				if (ball.column < 0) {
+					ball.column++;
+					ball.row++;
+					ball.direction = DIRECTION.DOWN;
+				}
+			} else {
+				ball.row++;
+				ball.direction = DIRECTION.DOWN;
+			}
+			break;
+		case 'S':
+			if (ball.direction === DIRECTION.DOWN) {
+				if (ball.column === 0) {
+					ball.column++;
+					ball.direction = DIRECTION.RIGHT;
+				} else if (ball.column === COLUMNS - 1) {
+					ball.column--;
+					ball.direction = DIRECTION.LEFT;
+				} else {
+					newBall = makeNewBall(ball);
+					ball.column++;
+					ball.direction = DIRECTION.RIGHT;
+					newBall.column--;
+					newBall.direction = DIRECTION.LEFT;
+				}
+			} else if (ball.direction === DIRECTION.RIGHT) {
+				if (ball.column === COLUMNS - 1) {
+					ball.row++;
+					ball.direction = DIRECTION.DOWN;
+				} else {
+					newBall = makeNewBall(ball);
+					ball.column++;
+					newBall.row++;
+					newBall.direction = DIRECTION.DOWN;
+				}
+			} else if (ball.column === 0) {
+				ball.row++;
+				ball.direction = DIRECTION.DOWN;
+			} else {
+				newBall = makeNewBall(ball);
+				ball.column--;
+				newBall.row++;
+				newBall.direction = DIRECTION.DOWN;
+			}
+			break;
+		default:
+			ball.direction = DIRECTION.DOWN;
+			ball.row++;
+	}
+
+	return [ball].concat(newBall || []);
+};
+
 export const nextState = state => {
 //	debugger
   if (state.activeList.length) {
-    console.log('activeList');
 	  return state.activeList.reduce(effectReducer, {
       ...state,
       activeList: []
     });
   }
-	if (state.balls.some(ball => !ball.dead)) {
-		console.log('balls');
-		return state.balls.reduce((state, ball, i) =>
-			!ball.dead
+	if (state.balls.some(({dead}) => !dead)) {
+		return state.balls.reduce((state, {dead}, i) =>
+			!dead
 				? dropBallEffectFn(state, i)
 				: state,
-			state);
+		state);
 	}
 	if (state.individuals.some(x => x.progress < 1)) {
 //		debugger
-		console.log('individuals');
 		return state.individuals.reduce((state, individual, i) =>
 				individual.progress < 1
 					? moveIndividualEffectFn(state, i)
 					: state,
 			state);
 	}
-	console.log('mStack');
 //debugger
   while (!state.activeList.length && state.mStack.length && !state.paused && !state.balls.some(ball => !ball.dead) && !state.individuals.some(x => x.progress < 1)) {
 	  //debugger
@@ -71,10 +239,8 @@ export const nextState = state => {
 };
 
 const PAUSE_EFFECT = 'PAUSE_EFFECT';
-const DROP_BALL_EFFECT = 'DROP_BALL_EFFECT';
 
 const pauseEffect = makeActionCreator(PAUSE_EFFECT, 'time');
-const dropBallEffect = makeActionCreator(DROP_BALL_EFFECT, 'index');
 
 const moveIndividualEffectFn = (state, index) => {
 	const individual = {...state.individuals[index]};
@@ -96,32 +262,7 @@ const moveIndividualEffectFn = (state, index) => {
 	};
 };
 
-const dropBallEffectFn = (state, index) => {
-	var ball = {...state.balls[index]};
-	if (ball.row >= ROWS + 2) {
-		return state;
-	}
-	ball.progress += getInitialProgressIncrement(state.speed);
-	var collectedPoints = state.collectedPoints;
-	var activeList = [...state.activeList];
-	if (ball.progress > 0.999 || state.speed === FAST) {
-		collectedPoints += moveBall({
-			animate: true,
-			speed: state.speed,
-			activeList,
-			boxes: state.boxes,
-			balls: state.balls,
-			ball,
-			index
-		});
-	}
-	return {
-		...state,
-		balls: replaceAtIndex(state.balls, index, () => ball),
-		collectedPoints,
-		activeList
-	};
-};
+
 
 const effectReducer = createReducer(null, {
   [PAUSE_EFFECT]: (state, { time }) => {
@@ -138,164 +279,8 @@ const effectReducer = createReducer(null, {
 const DOWN = 'DOWN';
 const LEFT = 'LEFT';
 const RIGHT = 'RIGHT';
-const DIRECTION = {
+export const DIRECTION = {
   DOWN, LEFT, RIGHT
-};
-
-const getCollectedPoints = ({ball, index, speed, activeList, prevRow, prevColumn, animate}) => {
-  if (animate) {
-    ball.location = pointInPlayground(prevRow, prevColumn);
-    ball.destination = pointInPlayground(ball.row, ball.column);
-    ball.progress = 0;
-    if (speed === SPEED.FAST) {
-      ball.progress = 0.99;
-    }
-    activeList.push(dropBallEffect(index));
-  }
-  if (ball.row > ROWS) {
-    ball.dead = true;
-    if (ball.column === BALL_COLLECTION_COLUMN) {
-      return ball.value;
-    }
-    return -PENALTY_POINTS;
-  }
-  return 0;
-};
-
-const moveBall = ({animate, speed, activeList, boxes, balls, ball, index}) => {
-  const prevRow = ball.row;
-  const prevColumn = ball.column;
-  var box;
-  if (ball.column >= 0 && ball.column < COLUMNS && ball.row >= 0 && ball.row < ROWS) {
-    box = boxes[ball.row][ball.column]; // this might be null
-  }
-
-  if (!box) {
-    ball.direction = DIRECTION.DOWN;
-    ball.row++;
-    return getCollectedPoints({
-      ball,
-      index,
-      speed,
-      activeList,
-      prevRow,
-      prevColumn,
-      animate
-    });
-  }
-  const makeNewBall = ball => ({
-    ...ball,
-    dead: false
-  });
-  var newBall;
-  switch (box.type) {
-    case '0':
-      ball.value++;
-      if (ball.direction === DIRECTION.DOWN) {
-        ball.row++;
-      } else if (ball.direction === DIRECTION.RIGHT) {
-        ball.column++;
-        if (ball.column >= COLUMNS) {
-          ball.column--;
-          ball.row++;
-          ball.direction = DIRECTION.DOWN;
-        }
-      } else {
-        ball.column--;
-        if (ball.column < 0) {
-          ball.column++;
-          ball.row++;
-          ball.direction = DIRECTION.DOWN;
-        }
-      }
-      break;
-    case '1':
-      if (ball.direction === DIRECTION.DOWN) {
-        ball.column++;
-        ball.direction = DIRECTION.RIGHT;
-        if (ball.column >= COLUMNS) {
-          ball.column--;
-          ball.row++;
-          ball.direction = DIRECTION.DOWN;
-        }
-      } else {
-        ball.row++;
-        ball.direction = DIRECTION.DOWN;
-      }
-      break;
-    case '2':
-      if (ball.direction === DIRECTION.DOWN) {
-        ball.column--;
-        ball.direction = DIRECTION.LEFT;
-        if (ball.column < 0) {
-          ball.column++;
-          ball.row++;
-          ball.direction = DIRECTION.DOWN;
-        }
-      } else {
-        ball.row++;
-        ball.direction = DIRECTION.DOWN;
-      }
-      break;
-    case '3':
-      if (ball.direction === DIRECTION.DOWN) {
-        if (ball.column === 0) {
-          ball.column++;
-          ball.direction = DIRECTION.RIGHT;
-        } else if (ball.column === COLUMNS - 1) {
-          ball.column--;
-          ball.direction = DIRECTION.LEFT;
-        } else {
-          newBall = makeNewBall(ball);
-          ball.column++;
-          ball.direction = DIRECTION.RIGHT;
-          newBall.column--;
-          newBall.direction = DIRECTION.LEFT;
-        }
-      } else if (ball.direction === DIRECTION.RIGHT) {
-        if (ball.column === COLUMNS - 1) {
-          ball.row++;
-          ball.direction = DIRECTION.DOWN;
-        } else {
-          newBall = makeNewBall(ball);
-          ball.column++;
-          newBall.row++;
-          newBall.direction = DIRECTION.DOWN;
-        }
-      } else if (ball.column === 0) {
-        ball.row++;
-        ball.direction = DIRECTION.DOWN;
-      } else {
-        newBall = makeNewBall(ball);
-        ball.column--;
-        newBall.row++;
-        newBall.direction = DIRECTION.DOWN;
-      }
-      break;
-  }
-
-  var collectedPoints = getCollectedPoints({
-    ball,
-    index,
-    speed,
-    activeList,
-    prevRow,
-    prevColumn,
-    animate
-  });
-  if (newBall) {
-    collectedPoints += getCollectedPoints({
-      ball: newBall,
-      index: balls.length,
-      speed,
-      activeList,
-      prevRow,
-      prevColumn,
-      animate
-    });
-    balls.push(newBall);
-  }
-  return collectedPoints;
 };
 
 const GENERATION_OBJECT = 'GENERATION_OBJECT';
@@ -758,7 +743,7 @@ const isFunction = x => typeof x === 'function';
 const ensureFunction = x => isFunction(x) ? x : () => x;
 */
 
-const replaceAtIndex = (xs, index, fn) => xs.slice(0, index).concat(isFunction(fn) ? fn(xs[index]) : fn, xs.slice(index+1));
+export const replaceAtIndex = (xs, index, fn) => xs.slice(0, index).concat(isFunction(fn) ? fn(xs[index]) : fn, xs.slice(index+1));
 
 const replaceIndex = (i, fn, xs) => xs.slice(0, i).concat(isFunction(fn) ? fn(xs[i]) : fn, xs.slice(i + 1));
 
@@ -855,7 +840,7 @@ export const pointInPlayground = (row, column) => ({
   y: Y_SPACING * (row + 1)
 });
 
-const getInitialProgressIncrement = speed => ({
+export const getInitialProgressIncrement = speed => ({
 	[FAST]: 0.5,
 	[MEDIUM]: 0.25,
 	[SLOW]: 0.05

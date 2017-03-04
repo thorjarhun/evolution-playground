@@ -1,15 +1,8 @@
 import { START, STOP, TICK } from '../actions/controls.js'
 
-const calculateFrameRate = (ticks, startedAt, now) =>
-  startedAt
-  ? Math.ceil(ticks / ((now - startedAt) / 1000))
-  : null;
-
 export default (state = {
   startedAt: null,
-  ticks: 0,
-  frameRate: null,
-  frameId: null
+  ticks: 0
 }, action) => {
   switch (action.type) {
     case START:
@@ -21,15 +14,12 @@ export default (state = {
     case STOP:
       return {
         ...state,
-        startedAt: null,
-        frameRate: null
+        startedAt: null
       };
     case TICK:
       return {
         ...state,
-        ticks: state.ticks + 1,
-        frameRate: calculateFrameRate(state.ticks + 1, state.startedAt, action.now),
-        frameId: action.frameId
+        ticks: state.ticks + 1
       };
     default:
       return state;

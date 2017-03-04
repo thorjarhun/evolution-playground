@@ -4,15 +4,15 @@ import { connect } from 'react-redux';
 import { toggleAutoplay, tick, reset } from '../actions/controls';
 
 export default connect(
-    state => ({ profiler: state.profiler }),
+    state => ({ profiler: state.profiler, now: Date.now() }),
     dispatch => ({
       reset: () => dispatch(reset()),
-      tick: () => dispatch(tick({})),
+      tick: () => dispatch(tick()),
       toggleAutoplay: () => dispatch(toggleAutoplay(Date.now()))
     })
-)(({profiler, reset, tick, toggleAutoplay}) => 
+)(({profiler, now, reset, tick, toggleAutoplay}) =>
     <div className='grid-controls'>
-      <div className='btn-group' role='group' style={{ marginBottom: `${(!profiler.frameId ? 20 : 0)}px` }}>
+      <div className='btn-group' role='group'>
         <button className='btn btn-danger' onClick={reset}>
           RESET
         </button>
@@ -24,11 +24,16 @@ export default connect(
       {
         profiler.startedAt &&
         <div className='text-muted'>
-          {`${profiler.frameRate} fps`}
+          {`${calculateFrameRate(profiler.ticks + 1, profiler.startedAt, now)} fps`}
         </div>
       }
     </div>
 );
+
+const calculateFrameRate = (ticks, startedAt, now) =>
+	startedAt
+		? Math.ceil(ticks / ((now - startedAt) / 1000))
+		: null;
 
 const ToggleButton = ({
     on,
