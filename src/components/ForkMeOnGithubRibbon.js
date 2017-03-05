@@ -1,6 +1,6 @@
 import React from 'react';
 
-const PROJECT_URL = 'https://github.com/thorjarhun/ice';
+const PROJECT_URL = 'https://github.com/thorjarhun/evolution-playground';
 
 const ribbon =
   <div className='github-fork-ribbon'>

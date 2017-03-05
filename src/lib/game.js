@@ -1,4 +1,4 @@
-const makeActionCreator = (type, ...argNames) => (...args) =>
+const createActionCreator = (type, ...argNames) => (...args) =>
   argNames.reduce((a,_,i) => ({ ...a, [argNames[i]]: args[i] }), { type });
 
 const createReducer = (initialState, handlers) => (state = initialState, action) =>
@@ -9,11 +9,17 @@ const createReducer = (initialState, handlers) => (state = initialState, action)
 const SLOW = 'SLOW';
 const MEDIUM = 'MEDIUM';
 const FAST = 'FAST';
-
 export const SPEED = {
   SLOW,
   MEDIUM,
   FAST
+};
+
+const DOWN = 'DOWN';
+const LEFT = 'LEFT';
+const RIGHT = 'RIGHT';
+export const DIRECTION = {
+	DOWN, LEFT, RIGHT
 };
 
 import {
@@ -32,8 +38,7 @@ import {
   CROSSOVER_RATE
 } from '../constants/game';
 
-
-const dropBallEffectFn = (state, index) => {
+const moveBallByIndex = (state, index) => {
 	const ball = {...state.balls[index]};
 	if (ball.row >= ROWS + 2) {
 		return state;
@@ -95,117 +100,102 @@ const getBoxType = (boxes, row, column) => {
 	}
 };
 
-/* This will return an object like:
- [...balls]
- */
-
 const moveBall = ({boxType, ball}) => {
-	const updaters = {
-		A: ball => ball,
-		L: ball => ball,
-		R: ball => ball,
-		S: ball => ball
-	};
-
-	const makeNewBall = ball => ({
-		...ball,
-		dead: false
-	});
-	var newBall;
-	switch (boxType) {
-		case 'A':
-			ball.value++;
-			if (ball.direction === DIRECTION.DOWN) {
-				ball.row++;
-			} else if (ball.direction === DIRECTION.RIGHT) {
-				ball.column++;
-				if (ball.column >= COLUMNS) {
-					ball.column--;
-					ball.row++;
-					ball.direction = DIRECTION.DOWN;
-				}
-			} else {
-				ball.column--;
-				if (ball.column < 0) {
-					ball.column++;
-					ball.row++;
-					ball.direction = DIRECTION.DOWN;
-				}
-			}
-			break;
-		case 'L':
-			if (ball.direction === DIRECTION.DOWN) {
-				ball.column++;
-				ball.direction = DIRECTION.RIGHT;
-				if (ball.column >= COLUMNS) {
-					ball.column--;
-					ball.row++;
-					ball.direction = DIRECTION.DOWN;
-				}
-			} else {
-				ball.row++;
-				ball.direction = DIRECTION.DOWN;
-			}
-			break;
-		case 'R':
-			if (ball.direction === DIRECTION.DOWN) {
-				ball.column--;
-				ball.direction = DIRECTION.LEFT;
-				if (ball.column < 0) {
-					ball.column++;
-					ball.row++;
-					ball.direction = DIRECTION.DOWN;
-				}
-			} else {
-				ball.row++;
-				ball.direction = DIRECTION.DOWN;
-			}
-			break;
-		case 'S':
-			if (ball.direction === DIRECTION.DOWN) {
-				if (ball.column === 0) {
-					ball.column++;
-					ball.direction = DIRECTION.RIGHT;
-				} else if (ball.column === COLUMNS - 1) {
-					ball.column--;
-					ball.direction = DIRECTION.LEFT;
-				} else {
-					newBall = makeNewBall(ball);
-					ball.column++;
-					ball.direction = DIRECTION.RIGHT;
-					newBall.column--;
-					newBall.direction = DIRECTION.LEFT;
-				}
-			} else if (ball.direction === DIRECTION.RIGHT) {
-				if (ball.column === COLUMNS - 1) {
-					ball.row++;
-					ball.direction = DIRECTION.DOWN;
-				} else {
-					newBall = makeNewBall(ball);
-					ball.column++;
-					newBall.row++;
-					newBall.direction = DIRECTION.DOWN;
-				}
-			} else if (ball.column === 0) {
-				ball.row++;
-				ball.direction = DIRECTION.DOWN;
-			} else {
-				newBall = makeNewBall(ball);
-				ball.column--;
-				newBall.row++;
-				newBall.direction = DIRECTION.DOWN;
-			}
-			break;
-		default:
-			ball.direction = DIRECTION.DOWN;
-			ball.row++;
+	if (updaters[boxType]) {
+		return updaters[boxType](ball);
+	} else {
+		sendDown(ball);
+		return [ball];
 	}
-
-	return [ball].concat(newBall || []);
+};
+const sendLeft = ball => {
+	if (ball.column === 0) {
+		sendDown(ball);
+	} else {
+		ball.column--;
+		ball.direction = DIRECTION.LEFT;
+	}
 };
 
+const sendRight = ball => {
+	if (ball.column === COLUMNS - 1) {
+		sendDown(ball);
+	} else {
+		ball.column++;
+		ball.direction = DIRECTION.RIGHT;
+	}
+};
+
+const sendDown = ball => {
+	ball.row++;
+	ball.direction = DIRECTION.DOWN;
+};
+
+const updaters = {
+	A: ball => {
+		ball.value++;
+		if (ball.direction === DIRECTION.DOWN) {
+			sendDown(ball);
+		} else if (ball.direction === DIRECTION.RIGHT) {
+			sendRight(ball);
+		} else {
+			sendLeft(ball);
+		}
+		return [ball];
+	},
+	L: ball => {
+		if (ball.direction === DIRECTION.DOWN) {
+			sendRight(ball);
+		} else {
+			sendDown(ball);
+		}
+		return [ball];
+	},
+	R: ball => {
+		if (ball.direction === DIRECTION.DOWN) {
+			sendLeft(ball);
+		} else {
+			sendDown(ball);
+		}
+		return [ball];
+	},
+	S: ball => {
+		var newBall;
+		if (ball.direction === DIRECTION.DOWN) {
+			if (ball.column === 0) {
+				sendRight(ball);
+			} else if (ball.column === COLUMNS - 1) {
+				sendLeft(ball);
+			} else {
+				newBall = makeNewBall(ball);
+				sendLeft(newBall);
+				sendRight(ball);
+			}
+		} else if (ball.direction === DIRECTION.RIGHT) {
+			if (ball.column === COLUMNS - 1) {
+				sendDown(ball);
+			} else {
+				newBall = makeNewBall(ball);
+				sendDown(newBall);
+				sendRight(ball);
+			}
+		} else if (ball.column === 0) {
+			sendDown(ball);
+		} else {
+			newBall = makeNewBall(ball);
+			sendDown(newBall);
+			sendLeft(ball);
+		}
+		return [ball].concat(newBall || []);
+	}
+};
+
+const makeNewBall = ball => ({
+	...ball,
+	dead: false
+});
+
 export const nextState = state => {
-//	debugger
   if (state.activeList.length) {
 	  return state.activeList.reduce(effectReducer, {
       ...state,
@@ -215,21 +205,18 @@ export const nextState = state => {
 	if (state.balls.some(({dead}) => !dead)) {
 		return state.balls.reduce((state, {dead}, i) =>
 			!dead
-				? dropBallEffectFn(state, i)
+				? moveBallByIndex(state, i)
 				: state,
 		state);
 	}
 	if (state.individuals.some(x => x.progress < 1)) {
-//		debugger
 		return state.individuals.reduce((state, individual, i) =>
 				individual.progress < 1
-					? moveIndividualEffectFn(state, i)
+					? moveIndividualByIndex(state, i)
 					: state,
 			state);
 	}
-//debugger
   while (!state.activeList.length && state.mStack.length && !state.paused && !state.balls.some(ball => !ball.dead) && !state.individuals.some(x => x.progress < 1)) {
-	  //debugger
     state = animationReducer({
       ...state,
       mStack: state.mStack.slice(0, -1)
@@ -238,11 +225,7 @@ export const nextState = state => {
   return state;
 };
 
-const PAUSE_EFFECT = 'PAUSE_EFFECT';
-
-const pauseEffect = makeActionCreator(PAUSE_EFFECT, 'time');
-
-const moveIndividualEffectFn = (state, index) => {
+const moveIndividualByIndex = (state, index) => {
 	const individual = {...state.individuals[index]};
 	if (individual.expandingGene || individual.shrinkingGene) {
 		console.assert(individual.expandingGene - individual.shrinkingGene);
@@ -262,8 +245,8 @@ const moveIndividualEffectFn = (state, index) => {
 	};
 };
 
-
-
+const PAUSE_EFFECT = 'PAUSE_EFFECT';
+const pauseEffect = createActionCreator(PAUSE_EFFECT, 'time');
 const effectReducer = createReducer(null, {
   [PAUSE_EFFECT]: (state, { time }) => {
     if (!time || state.speed === FAST) {
@@ -276,12 +259,6 @@ const effectReducer = createReducer(null, {
   }
 });
 
-const DOWN = 'DOWN';
-const LEFT = 'LEFT';
-const RIGHT = 'RIGHT';
-export const DIRECTION = {
-  DOWN, LEFT, RIGHT
-};
 
 const GENERATION_OBJECT = 'GENERATION_OBJECT';
 const EVALUATE_FITNESS_OBJECT = 'EVALUATE_FITNESS_OBJECT';
@@ -310,28 +287,28 @@ const INSERT_MUTATION_OBJECT = 'INSERT_MUTATION_OBJECT';
 const POINT_MUTATION_OBJECT = 'POINT_MUTATION_OBJECT';
 const EXPAND_GENE_OBJECT = 'EXPAND_GENE_OBJECT';
 
-export const generationObject = makeActionCreator(GENERATION_OBJECT);
-const evaluateFitnessObject = makeActionCreator(EVALUATE_FITNESS_OBJECT);
-const sortOnFitnessObject = makeActionCreator(SORT_ON_FITNESS_OBJECT);
-const evalIndividualObject = makeActionCreator(EVAL_INDIVUDUAL_OBJECT);
-const pauseObject = makeActionCreator(PAUSE_OBJECT);
-const setStateObject = makeActionCreator(SET_STATE_OBJECT, 'mutation');
-const moveIndividualBackHomeObject = makeActionCreator(MOVE_INDIVIDUAL_BACK_HOME_OBJECT, 'index', 'showFitness');
-const checkForIcObject = makeActionCreator(CHECK_FOR_IC_OBJECT, 'index');
-const checkThresholdObject = makeActionCreator(CHECK_THRESHOLD_OBJECT);
-const purgeObject = makeActionCreator(PURGE_OBJECT);
-const crossoverObject = makeActionCreator(CROSSOVER_OBJECT, 'index', 'ppr');
-const mutateObject = makeActionCreator(MUTATE_OBJECT, 'index', 'ppr');
-const removeSpacesObject = makeActionCreator(REMOVE_SPACES_OBJECT, 'index');
-const deleteMutationOperationObject = makeActionCreator(DELETE_MUTATION_OPERATION_OBJECT, 'index', 'spot');
-const bringInParentOneObject = makeActionCreator(BRING_IN_PARENT_ONE_OBJECT, 'index');
-const bringInParentTwoObject = makeActionCreator(BRING_IN_PARENT_TWO_OBJECT, 'index');
-const shrinkGeneObject = makeActionCreator(SHRINK_GENE_OBJECT, 'index', 'spot', 'fromSize', 'toSize');
-const expandGeneObject = makeActionCreator(EXPAND_GENE_OBJECT, 'index', 'spot', 'fromSize', 'toSize');
-const procreateObject = makeActionCreator(PROCREATE, 'index', 'parent1', 'parent2');
-const deleteMutationObject = makeActionCreator(DELETE_MUTATION_OBJECT, 'index');
-const insertMutationObject = makeActionCreator(INSERT_MUTATION_OBJECT, 'index');
-const pointMutationObject = makeActionCreator(POINT_MUTATION_OBJECT, 'index');
+export const generationObject = createActionCreator(GENERATION_OBJECT);
+const evaluateFitnessObject = createActionCreator(EVALUATE_FITNESS_OBJECT);
+const sortOnFitnessObject = createActionCreator(SORT_ON_FITNESS_OBJECT);
+const evalIndividualObject = createActionCreator(EVAL_INDIVUDUAL_OBJECT);
+const pauseObject = createActionCreator(PAUSE_OBJECT);
+const setStateObject = createActionCreator(SET_STATE_OBJECT, 'mutation');
+const moveIndividualBackHomeObject = createActionCreator(MOVE_INDIVIDUAL_BACK_HOME_OBJECT, 'index', 'showFitness');
+const checkForIcObject = createActionCreator(CHECK_FOR_IC_OBJECT, 'index');
+const checkThresholdObject = createActionCreator(CHECK_THRESHOLD_OBJECT);
+const purgeObject = createActionCreator(PURGE_OBJECT);
+const crossoverObject = createActionCreator(CROSSOVER_OBJECT, 'index', 'ppr');
+const mutateObject = createActionCreator(MUTATE_OBJECT, 'index', 'ppr');
+const removeSpacesObject = createActionCreator(REMOVE_SPACES_OBJECT, 'index');
+const deleteMutationOperationObject = createActionCreator(DELETE_MUTATION_OPERATION_OBJECT, 'index', 'spot');
+const bringInParentOneObject = createActionCreator(BRING_IN_PARENT_ONE_OBJECT, 'index');
+const bringInParentTwoObject = createActionCreator(BRING_IN_PARENT_TWO_OBJECT, 'index');
+const shrinkGeneObject = createActionCreator(SHRINK_GENE_OBJECT, 'index', 'spot', 'fromSize', 'toSize');
+const expandGeneObject = createActionCreator(EXPAND_GENE_OBJECT, 'index', 'spot', 'fromSize', 'toSize');
+const procreateObject = createActionCreator(PROCREATE, 'index', 'parent1', 'parent2');
+const deleteMutationObject = createActionCreator(DELETE_MUTATION_OBJECT, 'index');
+const insertMutationObject = createActionCreator(INSERT_MUTATION_OBJECT, 'index');
+const pointMutationObject = createActionCreator(POINT_MUTATION_OBJECT, 'index');
 
 const augmentWith = augmentation => augmentee => ({
 	...augmentee,
@@ -351,7 +328,7 @@ const RUN_INDIVIDUAL = 'RUN_INDIVIDUAL';
 const RUN_ENDED = 'RUN_ENDED';
 const BALL_DIED = 'BALL_DIED';
 
-const ballDied = makeActionCreator(BALL_DIED, 'index');
+const ballDied = createActionCreator(BALL_DIED, 'index');
 
 const animationReducer = createReducer(null, {
 	[PHASE_ONE]: state => state,
@@ -492,25 +469,10 @@ const animationReducer = createReducer(null, {
 		  types: gene => (+gene + randomInt(0, 3)) % 4
 	  };
 
-	  const mutateGeneByChromosomeKey = chromosomeKey => mutationsByChromosomeKey[chromosomeKey];
-
-	  const mutateChromosomeAtIndexByChromosomeKey = (chromosome, index, chromosomeKey) =>
-		  replaceAtIndex(chromosome, index, mutateGeneByChromosomeKey(chromosomeKey));
-
 	  const mutateGeneAtIndexInDNAByChromosomeKey = (dna, chromosomeKey, index) => ({
 		  ...dna,
-		  [chromosomeKey]: mutateChromosomeAtIndexByChromosomeKey(dna[chromosomeKey], index, chromosomeKey)
+		  [chromosomeKey]: replaceAtIndex(dna[chromosomeKey], index, mutationsByChromosomeKey[chromosomeKey])
 	  });
-	  /*
-	  const mutateGeneAtIndexInDNAByChromosomeKey = (dna, chromosomeKey, index) => ({
-		  ...dna,
-		  [chromosomeKey]: replaceAtIndex(dna[chromosomeKey], index, oldGene => ({
-			  xs: (+oldGene + Math.pow(-1, Math.random() < 0.5) + COLUMNS) % COLUMNS,
-			  ys: (+oldGene + Math.pow(-1, Math.random() < 0.5) + ROWS) % ROWS,
-			  types: (+oldGene + randomInt(0, 3)) % 4
-		  })[chromosomeKey])
-	  });
-	  */
 
     return augmenter({
       mStack: append(
@@ -616,9 +578,8 @@ const animationReducer = createReducer(null, {
 	        };
         }))
       })).concat(helper1, helper2),
-      mStack: mStack => mStack.concat(setStateObject(augmenter({
-        individuals: individuals => replaceAtIndex(individuals.slice(0, -2), index, individual => ({
-          ...individual,
+      mStack: append(setStateObject(augmenter({
+        individuals: individuals => replaceAtIndex(individuals.slice(0, -2), index, augmentWith({
           visible: true
         }))
       })))
@@ -682,7 +643,14 @@ const animationReducer = createReducer(null, {
   },
   [SHRINK_GENE_OBJECT]: (state, { index, spot, fromSize, toSize }) => ({
     ...state,
-    individuals: replaceAtIndex(state.individuals, index, individual => shrink(individual, spot, fromSize, toSize))
+    individuals: replaceAtIndex(state.individuals, index, augmentWith({
+		  fromSize,
+		  toSize,
+		  modIndex: spot,
+			progress: 0,
+		  expandingGene: false,
+		  shrinkingGene: true
+		}))
   }),
   [EXPAND_GENE_OBJECT]: (state, { index, spot, fromSize, toSize }) => ({
     ...state,
@@ -779,16 +747,6 @@ const createGene = () => ({
 	xs: randomInt(0, COLUMNS),
 	ys: randomInt(0, ROWS),
 	types: randomInt(0, 4)
-});
-
-const shrink = (individual, spot, fromSize, toSize) => ({
-  ...individual,
-  fromSize,
-  toSize,
-  modIndex: spot,
-	progress: 0,
-  expandingGene: false,
-  shrinkingGene: true
 });
 
 const sortOnFitness = individuals => [...individuals].sort((a,b) => b.fitness - a.fitness);

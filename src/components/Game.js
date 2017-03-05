@@ -160,8 +160,8 @@ const Box = ({box}) => {
     'rgb(50,200,50)'
   ][box.type];
   const point = pointInPlayground(box.row, box.column);
-  const x = point.x + X_SPACING / 2; // - offset
-  const y = point.y + Y_SPACING / 2; // + offset
+  const x = point.x + X_SPACING / 2;
+  const y = point.y + Y_SPACING / 2;
   return <text x={x} y={y} dy='0.3em' fontSize={18} fontFamily="sans-serif" fill={color} textAnchor="middle">{s}</text>;
 };
 
