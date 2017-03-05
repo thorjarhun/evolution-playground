@@ -11,3 +11,14 @@ export const X_SPACING = Math.floor(SVG_WIDTH / 2 / (COLUMNS + 2));
 export const Y_SPACING = X_SPACING; //SVG_HEIGHT * 0.7 / (ROWS + 1);
 export const PENALTY_POINTS = 0;
 export const FITNESS_THRESHOLD = 50;
+
+export const SPEED = {
+	SLOW: 'SLOW',
+	MEDIUM: 'MEDIUM',
+	FAST: 'FAST'
+};
+export const DIRECTION = {
+	DOWN: 'DOWN',
+	LEFT: 'LEFT',
+	RIGHT: 'RIGHT'
+};

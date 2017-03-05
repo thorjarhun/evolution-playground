@@ -1,6 +1,6 @@
 import React, { createElement } from 'react';
 import { ROWS, COLUMNS, SVG_WIDTH, SVG_HEIGHT, X_SPACING, Y_SPACING, BALL_DROP_COLUMN, BALL_COLLECTION_COLUMN } from '../constants/game';
-import { pointInPlayground } from '../lib/game';
+import { pointInPlayground, calculateDestination, calculatePoints } from '../lib/game';
 
 export default ({ state }) => {
   const topLeft = pointInPlayground(0, 0);
@@ -20,7 +20,7 @@ export default ({ state }) => {
       {
         state.boxesOn &&
         [(() => {
-            const s = `${state.collectedPoints} pts`;
+            const s = `${calculatePoints(state.balls)} pts`;
             const point = pointInPlayground(ROWS + 1, BALL_COLLECTION_COLUMN);
             const x = point.x + X_SPACING / 2;
             const y = point.y;
@@ -137,7 +137,7 @@ const Individual = ({individual}) => {
 	  if (expandingGene) {
 		  shift += +!!individual.fromSize + 2*individual.progress;
 	  } else {
-		  shift += (+!!individual.fromSize - individual.progress) +!!individual.toSize//individual.progress*x2.trim().length;
+		  shift += +!!individual.toSize + (+!!individual.fromSize - individual.progress)
 	  }
     x = loc.x + shift * CHAR_WIDTH;
     result.push(<text key={8} x={x} y={loc.y} dy='1em' fontSize={12} fontFamily='monospace'>{x3}</text>);
@@ -168,8 +168,12 @@ const Box = ({box}) => {
 const BALL_DIAMETER = 23; // TODO: calculate based on tile size
 
 const Ball = ({ball}) => {
-  const x = ball.location.x + ball.progress * (ball.destination.x - ball.location.x) + X_SPACING / 2;
-  const y = ball.location.y + ball.progress * (ball.destination.y - ball.location.y) + Y_SPACING / 2;
+	const location = pointInPlayground(ball.row, ball.column);
+	const dest = calculateDestination(ball);
+	const destination = pointInPlayground(dest.row, dest.column);
+  const x = location.x + ball.progress * (destination.x - location.x) + X_SPACING / 2;
+  const y = location.y + ball.progress * (destination.y - location.y) + Y_SPACING / 2;
+
   return (
     <g>
       <circle cx={x} cy={y} r={BALL_DIAMETER / 2} fill="rgb(255, 215, 0)" stroke="blue"/>

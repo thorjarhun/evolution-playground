@@ -6,21 +6,17 @@ const createReducer = (initialState, handlers) => (state = initialState, action)
     ? handlers[action.type](state, action)
     : state;
 
-const SLOW = 'SLOW';
-const MEDIUM = 'MEDIUM';
-const FAST = 'FAST';
-export const SPEED = {
-  SLOW,
-  MEDIUM,
-  FAST
-};
+const augmentWith = augmentation => augmentee => ({
+	...augmentee,
+	...augmentation
+});
 
-const DOWN = 'DOWN';
-const LEFT = 'LEFT';
-const RIGHT = 'RIGHT';
-export const DIRECTION = {
-	DOWN, LEFT, RIGHT
-};
+const augmenter = augmentations => augmentee => Object.keys(augmentations).reduce((augmentee, key) => ({
+	...augmentee,
+	[key]: isFunction(augmentations[key]) ? augmentations[key](augmentee[key]) : augmentations[key]
+}), augmentee);
+
+const append = (...args) => xs => xs.concat(...args);
 
 import {
   ROWS,
@@ -35,63 +31,146 @@ import {
   INITIAL_GENOME_LENGTH,
   PENALTY_POINTS,
   FITNESS_THRESHOLD,
-  CROSSOVER_RATE
+  CROSSOVER_RATE,
+	SPEED,
+	DIRECTION
 } from '../constants/game';
 
-const moveBallByIndex = (state, index) => {
-	const ball = {...state.balls[index]};
-	if (ball.row >= ROWS + 2) {
-		return state;
+// TODO: Obsolesce manually updating progress
+const advanceProgress = state => ({
+	...state,
+	individuals: state.individuals.map(individual =>
+		individual.progress >= 1
+			? individual
+			: {
+			...individual,
+			progress: individual.progress + getInitialProgressIncrement(state.speed) / (individual.helper ? 10 : (individual.expandingGene || individual.shrinkingGene) ? 3 : 1)
+		}
+	),
+	balls: state.balls.map(ball => ({
+		...ball,
+		progress: ball.progress + getInitialProgressIncrement(state.speed)
+	}))
+});
+
+export const nextState = state => {
+	const ANIMATIONS = [
+		{
+			test: state => state.delay,
+			reducer: augmenter({
+				delay: delay => delay - 1
+			})
+		},
+		{
+			test: state => state.balls.some(({row}) => row < ROWS),
+			reducer: advanceBalls
+		},
+		{
+			test: state => state.individuals.some(x => x.progress < 1),
+			reducer: state => state
+			/*
+			reducer: state => state.individuals.reduce((state, individual, i) =>
+					individual.progress < 1
+						? moveIndividualByIndex(state, i)
+						: state,
+				state)
+			*/
+		}
+	];
+
+	if (!state.delay) {
+		state = advanceProgress(state);
 	}
-	ball.progress += getInitialProgressIncrement(state.speed);
-	if (ball.progress >= 1) {
-		var points = 0;
-		const balls = ballStepComplete(state, index, true).map($ball => {
-			if ($ball.row > ROWS) {
-				points += $ball.column === BALL_COLLECTION_COLUMN ? $ball.value : -PENALTY_POINTS;
-				return {
-					...$ball,
-					dead: true
-				};
-			}
-			return $ball;
-		});
-		return {
+
+	if (ANIMATIONS.some(({test}) => test(state))) {
+		return ANIMATIONS.find(({test}) => test(state)).reducer(state);
+	}
+
+	while (state.mStack.length && ANIMATIONS.every(({test}) => !test(state))) {
+		state = animationReducer({
 			...state,
-			balls: replaceAtIndex(state.balls, index, balls[0]).concat(balls[1] || []),
-			collectedPoints: state.collectedPoints + points
-		};
+			mStack: state.mStack.slice(0, -1)
+		}, state.mStack[state.mStack.length-1]);
+	}
+	return state;
+};
+/*
+const moveIndividualByIndex = (state, index) => {
+	const individual = {...state.individuals[index]};
+	if (individual.expandingGene || individual.shrinkingGene) {
+		console.assert(individual.expandingGene - individual.shrinkingGene);
+	} else {
+		if (individual.progress >= 1) {
+			individual.location = {
+				x: individual.destination.x,
+				y: individual.destination.y
+			};
+		}
 	}
 	return {
 		...state,
-		balls: replaceAtIndex(state.balls, index, ball)
+		individuals: replaceAtIndex(state.individuals, index, () => individual)
 	};
 };
+const advanceIndividuals = (state, index) => ({
+	...state,
+	individuals: state.individuals.map(individual =>
+		individual.progress < 1 || individual.expandingGene || individual.shrinkingGene
+			? individual
+			: {
+				...individual,
+				location: individual.destination
+			}
+	)
+})
+*/
+const advanceBalls = state => ({
+	...state,
+	balls: state.balls.reduce((balls, ball, i) =>
+		ball.progress < 1
+			? balls.concat(ball)
+			: balls.concat(ballStepComplete(state, i)),
+		[])
+});
 
-const ballStepComplete = (state, index, animate) => {
-	const ball = {...state.balls[index]};
-	const {row, column} = ball;
-	const balls = moveBall({
-		boxType: getBoxType(state.boxes, row, column),
+export const calculatePoints = balls => balls.filter(({row}) => row >= ROWS).map(ball =>
+	ball.column === BALL_COLLECTION_COLUMN
+			? ball.value
+			: -PENALTY_POINTS
+).reduce(add, 0);
+
+const add = (x, y) => x + y;
+
+const ballStepComplete = (state, index) => {
+	const ball = {
+		...state.balls[index],
+		...calculateDestination(state.balls[index])
+	};
+	return moveBall({
+		boxType: getBoxType(state.boxes, ball.row, ball.column),
 		ball
-	});
-
-	if (animate) {
-		return balls.map(ball => startNextAnimation({
-			ball,
-			row,
-			column
-		}));
-	}
-	return balls;
+	}).map((ball, offset) => ({
+		...ball,
+		progress: offset ? .25 : 0
+	}));
 };
 
-const startNextAnimation = ({ball, row, column}) => ({
-	...ball,
-	location: pointInPlayground(row, column),
-	destination: pointInPlayground(ball.row, ball.column),
-	progress: 0
-});
+const offsets = {
+	[DIRECTION.LEFT]: (row, column) => ({
+		row,
+		column: column - 1
+	}),
+	[DIRECTION.RIGHT]: (row, column) => ({
+		row,
+		column: column + 1
+	}),
+	[DIRECTION.DOWN]: (row, column) => ({
+		row: row + 1,
+		column
+	})
+};
+
+export const calculateDestination = ({row, column, direction}) => offsets[direction](row, column);
 
 const getBoxType = (boxes, row, column) => {
 	if (row >= 0 && row < ROWS) {
@@ -112,7 +191,6 @@ const sendLeft = ball => {
 	if (ball.column === 0) {
 		sendDown(ball);
 	} else {
-		ball.column--;
 		ball.direction = DIRECTION.LEFT;
 	}
 };
@@ -121,13 +199,11 @@ const sendRight = ball => {
 	if (ball.column === COLUMNS - 1) {
 		sendDown(ball);
 	} else {
-		ball.column++;
 		ball.direction = DIRECTION.RIGHT;
 	}
 };
 
 const sendDown = ball => {
-	ball.row++;
 	ball.direction = DIRECTION.DOWN;
 };
 
@@ -167,7 +243,7 @@ const updaters = {
 			} else if (ball.column === COLUMNS - 1) {
 				sendLeft(ball);
 			} else {
-				newBall = makeNewBall(ball);
+				newBall = {...ball};
 				sendLeft(newBall);
 				sendRight(ball);
 			}
@@ -175,90 +251,20 @@ const updaters = {
 			if (ball.column === COLUMNS - 1) {
 				sendDown(ball);
 			} else {
-				newBall = makeNewBall(ball);
+				newBall = {...ball};
 				sendDown(newBall);
 				sendRight(ball);
 			}
 		} else if (ball.column === 0) {
 			sendDown(ball);
 		} else {
-			newBall = makeNewBall(ball);
+			newBall = {...ball};
 			sendDown(newBall);
 			sendLeft(ball);
 		}
 		return [ball].concat(newBall || []);
 	}
 };
-
-const makeNewBall = ball => ({
-	...ball,
-	dead: false
-});
-
-export const nextState = state => {
-  if (state.activeList.length) {
-	  return state.activeList.reduce(effectReducer, {
-      ...state,
-      activeList: []
-    });
-  }
-	if (state.balls.some(({dead}) => !dead)) {
-		return state.balls.reduce((state, {dead}, i) =>
-			!dead
-				? moveBallByIndex(state, i)
-				: state,
-		state);
-	}
-	if (state.individuals.some(x => x.progress < 1)) {
-		return state.individuals.reduce((state, individual, i) =>
-				individual.progress < 1
-					? moveIndividualByIndex(state, i)
-					: state,
-			state);
-	}
-  while (!state.activeList.length && state.mStack.length && !state.paused && !state.balls.some(ball => !ball.dead) && !state.individuals.some(x => x.progress < 1)) {
-    state = animationReducer({
-      ...state,
-      mStack: state.mStack.slice(0, -1)
-    }, state.mStack[state.mStack.length-1]);
-  }
-  return state;
-};
-
-const moveIndividualByIndex = (state, index) => {
-	const individual = {...state.individuals[index]};
-	if (individual.expandingGene || individual.shrinkingGene) {
-		console.assert(individual.expandingGene - individual.shrinkingGene);
-		individual.progress += getInitialProgressIncrement(state.speed);
-	} else {
-		individual.progress += getInitialProgressIncrement(state.speed) / (individual.helper ? 10 : 3);
-		if (individual.progress >= 1 || state.speed === FAST) {
-			individual.location = {
-				x: individual.destination.x,
-				y: individual.destination.y
-			};
-		}
-	}
-	return {
-		...state,
-		individuals: replaceAtIndex(state.individuals, index, () => individual)
-	};
-};
-
-const PAUSE_EFFECT = 'PAUSE_EFFECT';
-const pauseEffect = createActionCreator(PAUSE_EFFECT, 'time');
-const effectReducer = createReducer(null, {
-  [PAUSE_EFFECT]: (state, { time }) => {
-    if (!time || state.speed === FAST) {
-      return state;
-    }
-    return {
-      ...state,
-      activeList: [...state.activeList, pauseEffect(time-1)]
-    };
-  }
-});
-
 
 const GENERATION_OBJECT = 'GENERATION_OBJECT';
 const EVALUATE_FITNESS_OBJECT = 'EVALUATE_FITNESS_OBJECT';
@@ -309,18 +315,6 @@ const procreateObject = createActionCreator(PROCREATE, 'index', 'parent1', 'pare
 const deleteMutationObject = createActionCreator(DELETE_MUTATION_OBJECT, 'index');
 const insertMutationObject = createActionCreator(INSERT_MUTATION_OBJECT, 'index');
 const pointMutationObject = createActionCreator(POINT_MUTATION_OBJECT, 'index');
-
-const augmentWith = augmentation => augmentee => ({
-	...augmentee,
-	...augmentation
-});
-
-const augmenter = augmentations => augmentee => Object.keys(augmentations).reduce((augmentee, key) => ({
-	...augmentee,
-	[key]: isFunction(augmentations[key]) ? augmentations[key](augmentee[key]) : augmentations[key]
-}), augmentee);
-
-const append = (...args) => xs => xs.concat(...args);
 
 const PHASE_ONE = 'PHASE_ONE';
 const PHASE_TWO = 'PHASE_TWO';
@@ -380,15 +374,13 @@ const animationReducer = createReducer(null, {
 		...state,
 		mStack: [...state.mStack,
 			moveIndividualBackHomeObject(state.currentIndividual, true),
-			setStateObject(augmentWith({collectedPoints: 0})),
 			checkForIcObject(state.currentIndividual),
 			setStateObject(state => ({
 				...state,
 				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
 					...individual,
-					visible: true,
 					showFitness: true,
-					fitness: state.collectedPoints - individual.DNA.xs.length
+					fitness: calculatePoints(state.balls) - individual.DNA.xs.length
 				}))
 			})),
 			setStateObject(state => ({
@@ -397,12 +389,13 @@ const animationReducer = createReducer(null, {
 					visible: true
 				})),
 				boxes: loadDNA(state.individuals[state.currentIndividual].DNA),
-				collectedPoints: 0,
 				balls: [createStartBall(state.speed, state.initialBallValue)]
 			})),
 			setStateObject(state => ({
 				...state,
-				individuals: replaceAtIndex(state.individuals, state.currentIndividual, augmentWith({
+				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
+					...individual,
+					location: individual.destination,
 					destination: individualInGamePoint(),
 					progress: 0
 				}))
@@ -500,10 +493,11 @@ const animationReducer = createReducer(null, {
 
     const doMutation = (message, nextObject) => setStateObject(augmenter({
       message,
-      individuals: individuals => replaceAtIndex(individuals, index, () => ({
+      individuals: individuals => replaceAtIndex(individuals, index, individual => ({
         ...individuals[parent],
         visible: true,
         fitness: 0,
+	      location: individual.destination,
 	      destination: xoverChildPoint(),
         progress: 0,
         showFitness: false,
@@ -614,7 +608,9 @@ const animationReducer = createReducer(null, {
   },
   [BRING_IN_PARENT_ONE_OBJECT]: (state, { index }) => ({
     ...state,
-    individuals: replaceAtIndex(state.individuals, index, augmentWith({
+    individuals: replaceAtIndex(state.individuals, index, individual => ({
+	    ...individual,
+	    location: individual.destination,
 	    destination: xoverParent1Point(),
 	    progress: 0,
       showFitness: false
@@ -622,7 +618,9 @@ const animationReducer = createReducer(null, {
   }),
   [BRING_IN_PARENT_TWO_OBJECT]: (state, { index }) => ({
     ...state,
-    individuals: replaceAtIndex(state.individuals, index, augmentWith({
+    individuals: replaceAtIndex(state.individuals, index, individual => ({
+	    ...individual,
+	    location: individual.destination,
 	    destination: xoverParent2Point(),
 	    progress: 0,
       showFitness: false
@@ -643,8 +641,10 @@ const animationReducer = createReducer(null, {
   },
   [SHRINK_GENE_OBJECT]: (state, { index, spot, fromSize, toSize }) => ({
     ...state,
-    individuals: replaceAtIndex(state.individuals, index, augmentWith({
-		  fromSize,
+    individuals: replaceAtIndex(state.individuals, index, individual => ({
+	    ...individual,
+	    location: individual.destination,
+	    fromSize,
 		  toSize,
 		  modIndex: spot,
 			progress: 0,
@@ -654,8 +654,10 @@ const animationReducer = createReducer(null, {
   }),
   [EXPAND_GENE_OBJECT]: (state, { index, spot, fromSize, toSize }) => ({
     ...state,
-    individuals: replaceAtIndex(state.individuals, index, augmentWith({
-      fromSize,
+    individuals: replaceAtIndex(state.individuals, index, individual => ({
+	    ...individual,
+	    location: individual.destination,
+	    fromSize,
       toSize,
       modIndex: spot,
       progress: 0,
@@ -684,6 +686,7 @@ const animationReducer = createReducer(null, {
     message: 'SORT POPULATION',
     individuals: individuals => sortOnFitness(individuals).map((individual, i) => ({
 	    ...individual,
+	    location: individual.destination,
 	    destination: positionForIndividual(i),
 	    progress: 0
     }))
@@ -692,12 +695,14 @@ const animationReducer = createReducer(null, {
 /*
   [PAUSE_OBJECT]: state => ({
     ...state,
-    activeList: [...state.activeList, pauseEffect(25)]
+    delay: 25
   }),
 */
   [MOVE_INDIVIDUAL_BACK_HOME_OBJECT]: (state, { index, showFitness }) => ({
     ...state,
-    individuals: replaceAtIndex(state.individuals, index, augmentWith({
+    individuals: replaceAtIndex(state.individuals, index, individual => ({
+	    ...individual,
+	    location: individual.destination,
 	    destination: positionForIndividual(index),
 	    progress: 0,
       showFitness
@@ -706,10 +711,6 @@ const animationReducer = createReducer(null, {
 });
 
 const isFunction = x => typeof x === 'function';
-
-/* Alternative 'replaceAtIndex'
-const ensureFunction = x => isFunction(x) ? x : () => x;
-*/
 
 export const replaceAtIndex = (xs, index, fn) => xs.slice(0, index).concat(isFunction(fn) ? fn(xs[index]) : fn, xs.slice(index+1));
 
@@ -752,13 +753,15 @@ const createGene = () => ({
 const sortOnFitness = individuals => [...individuals].sort((a,b) => b.fitness - a.fitness);
 
 const createStartBall = (speed, initialBallValue) => ({
-  row: 0,
+  row: -1,
   column: BALL_DROP_COLUMN,
-  location: pointInPlayground(-1, BALL_DROP_COLUMN),
-  destination: pointInPlayground(0, BALL_DROP_COLUMN),
+  destination: {
+	  row: 0,
+	  column: BALL_DROP_COLUMN
+  },
   value: initialBallValue,
   direction: DIRECTION.DOWN,
-  progress: speed === FAST ? 0.99 : 0,
+  progress: speed === SPEED.FAST ? 1 : 0,
   dead: false
 });
 
@@ -799,9 +802,9 @@ export const pointInPlayground = (row, column) => ({
 });
 
 export const getInitialProgressIncrement = speed => ({
-	[FAST]: 0.5,
-	[MEDIUM]: 0.25,
-	[SLOW]: 0.05
+	[SPEED.FAST]: 0.5,
+	[SPEED.MEDIUM]: 0.25,
+	[SPEED.SLOW]: 0.05
 })[speed];
 
 // [min, max)
