@@ -1,5 +1,5 @@
 import { TICK } from '../actions/controls';
-import { SPEED } from '../constants/game';
+import { SPEED, INITIAL_BALL_VALUE } from '../constants/game';
 import { nextState, generationObject, generateInitialPopulation } from '../lib/game';
 
 const defaultState = () => ({
@@ -9,10 +9,10 @@ const defaultState = () => ({
   checkingIC: true,
   usingThreshold: true,
   speed: SPEED.MEDIUM,
-  initialBallValue: 15,
+  initialBallValue: INITIAL_BALL_VALUE,
   generation: 0,
   balls: [],
-  individuals: generateInitialPopulation(),
+  individuals: generateInitialPopulation(INITIAL_BALL_VALUE),
   mStack: [generationObject()],
 	currentIndividual: 0
 });

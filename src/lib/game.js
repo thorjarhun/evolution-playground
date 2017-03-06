@@ -47,9 +47,8 @@ const advanceProgress = state => ({
 			progress: individual.progress + getInitialProgressIncrement(state.speed) / (individual.helper ? 10 : 3)
 		}
 	),
-	balls: state.balls.map(ball => ({
-		...ball,
-		progress: ball.progress + getInitialProgressIncrement(state.speed)
+	balls: state.balls.map(augmenter({
+		progress: progress => progress + getInitialProgressIncrement(state.speed)
 	}))
 });
 
@@ -108,26 +107,22 @@ export const nextState = state => {
 				};
 			}
 			if (state.balls.some(({row}) => row < ROWS)) {
-				return advanceBalls(state);
+				return {
+					...state,
+					balls: advanceBalls(state.balls, state.boxes, true)
+				};
 			}
 			return {
 				...state,
 				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
 					...individual,
 					showFitness: true,
-					fitness: calculatePoints(state.balls) - individual.DNA.xs.length
-				})),
-				balls: []
-			};
-		} else if (individual.destination !== positionForIndividual(state.currentIndividual)) {
-			return {
-				...state,
-				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
-					...individual,
+					fitness: calculatePoints(state.balls) - individual.DNA.xs.length,
 					location: individual.destination,
 					destination: positionForIndividual(state.currentIndividual),
 					progress: 0
-				}))
+				})),
+				balls: []
 			};
 		} else if (state.currentIndividual < POPULATION_SIZE - 1) {
 			return {
@@ -150,7 +145,7 @@ export const nextState = state => {
 		} else if (state.usingThreshold && state.individuals[0].fitness > FITNESS_THRESHOLD) {
 			return {
 				...state,
-				message: 'DECREASE BALL VALUE', // TODO: Express this more prominently
+				message: 'DECREASING BALL VALUE', // TODO: Express this more prominently
 				initialBallValue: state.initialBallValue - 1,
 				currentIndividual: 0,
 				individuals: state.individuals.map(augmentWith({
@@ -164,7 +159,7 @@ export const nextState = state => {
 			};
 		}
 	}
-	
+
 	if (state.mStack.length && state.individuals.every(x => x.progress >= 1)) {
 		return animationReducer({
 			...state,
@@ -174,58 +169,51 @@ export const nextState = state => {
 	return state;
 };
 
-const advanceBalls = state => ({
-	...state,
-	balls: state.balls.reduce((balls, ball, i) =>
-		ball.progress < 1
-			? balls.concat(ball)
-			: balls.concat(ballStepComplete(state, i)),
-		[])
-});
-
 export const calculatePoints = balls => balls.filter(({row}) => row >= ROWS).map(ball =>
 	ball.column === BALL_COLLECTION_COLUMN
-			? ball.value
-			: -PENALTY_POINTS
+		? ball.value
+		: -PENALTY_POINTS
 ).reduce(add, 0);
 
 const add = (x, y) => x + y;
 
-const ballStepComplete = (state, index) => {
-	const ball = {
-		...state.balls[index],
-		...calculateDestination(state.balls[index])
-	};
-	return moveBall({
-		boxType: getBoxType(state.boxes, ball.row, ball.column),
-		ball
-	}).map((ball, offset) => ({
-		...ball,
-		progress: offset ? .25 : 0
-	}));
-};
+const advanceBalls = (balls, boxes, animate) =>
+	balls.reduce((balls, ball) =>
+		balls.concat(animate && ball.progress < 1
+			? ball
+			: advanceBall(applyDirection(ball), boxes)
+		)
+		, []);
 
-const destinationByDirection = {
-	[DIRECTION.LEFT]: (row, column) => ({
-		row,
-		column: column - 1
-	}),
-	[DIRECTION.RIGHT]: (row, column) => ({
-		row,
-		column: column + 1
-	}),
-	[DIRECTION.DOWN]: (row, column) => ({
-		row: row + 1,
-		column
-	})
-};
+const advanceBall = (ball, boxes) => moveBall({
+	boxType: getBoxType(boxes, ball.row, ball.column),
+	ball
+}).map((ball, offset) => ({
+	...ball,
+	progress: offset ? .25 : 0
+}));
 
-export const calculateDestination = ({row, column, direction}) => destinationByDirection[direction](row, column);
+export const applyDirection = ball => ({
+	...ball,
+	...{
+		[DIRECTION.LEFT]: {
+			column: ball.column - 1
+		},
+		[DIRECTION.RIGHT]: {
+			column: ball.column + 1
+		},
+		[DIRECTION.DOWN]: {
+			row: ball.row + 1
+		}
+	}[ball.direction]
+});
+
+export const boxSymbolByIndex = type => 'ALRS'[type];
 
 const getBoxType = (boxes, row, column) => {
 	if (row >= 0 && row < ROWS) {
 		const box = boxes[row][column];
-		return box && 'ALRS'[box.type];
+		return box && boxSymbolByIndex(box.type);
 	}
 };
 
@@ -441,6 +429,8 @@ const animationReducer = createReducer(null, {
 		  [chromosomeKey]: replaceAtIndex(dna[chromosomeKey], index, mutationsByChromosomeKey[chromosomeKey])
 	  });
 
+	  const randomKey = obj => Object.keys(obj)[randomInt(0, Object.keys(obj).length)];
+
     return augmenter({
       mStack: append(
 	      setStateObject(augmenter({
@@ -450,7 +440,7 @@ const animationReducer = createReducer(null, {
         pauseObject(),
 	      setStateObject(augmenter({
 		      individuals: individuals => replaceAtIndex(individuals, index, augmenter({
-			      DNA: DNA => mutateGeneAtIndexInDNAByChromosomeKey(DNA, Object.keys(mutationsByChromosomeKey)[randomInt(0, 3)], spot)
+			      DNA: DNA => mutateGeneAtIndexInDNAByChromosomeKey(DNA, randomKey(mutationsByChromosomeKey), spot)
 		      }))
 	      })),
         pauseObject(),
@@ -555,11 +545,8 @@ const animationReducer = createReducer(null, {
   },
   [CROSSOVER_OBJECT]: (state, { index, ppr }) => {
     const mStack = [];
-    const parents = {};
-    while (Object.keys(parents).length < 2) {
-      parents[randomInt(0, ppr)] = true;
-    }
-    const [parent1, parent2] = Object.keys(parents).map(i => +i);
+	  const parent1 = randomInt(0, ppr);
+	  const parent2 = (parent1 + randomInt(1, ppr)) % ppr;
     mStack.push(moveIndividualBackHomeObject(index, false));
     mStack.push(moveIndividualBackHomeObject(parent2, true));
     mStack.push(moveIndividualBackHomeObject(parent1, true));
@@ -761,7 +748,6 @@ export const getInitialProgressIncrement = speed => ({
 // [min, max)
 const randomInt = (min, max) => min + Math.floor(Math.random() * (max - min));
 
-//noinspection JSPotentiallyInvalidConstructorUsage
 const range = n => [...Array(n).keys()];
 
 import { comparator, head } from 'ramda';
@@ -781,7 +767,7 @@ const stringifyEncoding = dna => dna.reduce((a,c) => ({
 
 const stringifyEncoding2 = dna => Object.keys(dna).reduce((a, key) => (a[`${key}s`] = dna[key].join(''),a), {});
 
-const generateIndividual = (location, destination) => () => ({
+const generateIndividual = (location, destination) => ({
   DNA: stringifyEncoding(generateChromosomes()),
   location: {
     x: location.x,
@@ -801,34 +787,39 @@ const generateIndividual = (location, destination) => () => ({
   toSize: 12
 });
 
-const play = individual => {
-  return 0;
+const play = (dna, initialBallValue) => {
+	const boxes = loadDNA(dna);
+	var balls = [createStartBall(SPEED.FAST, initialBallValue)];
+	while (balls.some(({row}) => row < ROWS)) {
+		balls = advanceBalls(balls, boxes, false);
+	}
+	return calculatePoints(balls);
 };
 
-const individualLength = individual => individual.length;
+const dnaLength = chromosome => chromosome.length;
 
-const individualWithoutGene = (individual, i) => individual.slice(0, i).concat(individual.slice(i+1));
+const checkFitness = (dna, initialBallValue) => Math.max(0, play(dna, initialBallValue) - dnaLength(dna.xs));
 
-const checkFitness = individual => Math.max(0, play(individual) - individualLength(individual));
-
-const individualByFitness = comparator((a, b) => checkFitness(a) < checkFitness(b));
-
-export const generateInitialPopulation = () => range(POPULATION_SIZE).map(i => {
+export const generateInitialPopulation = initialBallValue => range(POPULATION_SIZE).map(i => {
   const location = positionForIndividual(i);
   const destination = positionForIndividual(i);
-  return head(range(6).map(generateIndividual(location, destination)).sort(individualByFitness));
-}).sort(individualByFitness);
+	var individual;
+	do {
+		individual = generateIndividual(location, destination);
+	} while (!checkFitness(individual.DNA, initialBallValue));
+	return individual;
+}).sort(comparator((a, b) => checkFitness(a.DNA, initialBallValue) < checkFitness(b.DNA, initialBallValue)));
 
-const individualIsIC = individual => {
-  const length = individualLength(individual);
+const individualIsIC = dna => {
+  const length = dnaLength(dna);
   return length >= 5 &&
-    checkFitness(individual) > 0 &&
-    range(length).every(i => checkFitness(individualWithoutGene(individual, i)) <= 0);
+    checkFitness(dna) > 0 &&
+    range(length).every(i => checkFitness(removeGeneAtIndex(dna, i)) <= 0);
 };
 
 // assumes population already sorted
 const parentPickRange = population => {
-  var last = population.findIndex(individual => checkFitness(individual) <= 0);
+  var last = population.findIndex(individual => individual.fitness <= 0);
   if (last === -1) { // if none, keep first half of population anyway
     return population.length / 2;
   }

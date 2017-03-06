@@ -1,6 +1,6 @@
 import React, { createElement } from 'react';
 import { ROWS, COLUMNS, SVG_WIDTH, SVG_HEIGHT, X_SPACING, Y_SPACING, BALL_DROP_COLUMN, BALL_COLLECTION_COLUMN } from '../constants/game';
-import { pointInPlayground, calculateDestination, calculatePoints } from '../lib/game';
+import { pointInPlayground, applyDirection, calculatePoints, boxSymbolByIndex } from '../lib/game';
 
 export default ({ state }) => {
   const topLeft = pointInPlayground(0, 0);
@@ -152,7 +152,7 @@ const Individual = ({individual}) => {
 
 // TODO: Rename to Tile
 const Box = ({box}) => {
-  const s = 'ALRS'[box.type];
+	const s = boxSymbolByIndex(box.type);
   const color = [
     'rgb(50,200,200)',
     'rgb(200,50,50)',
@@ -169,7 +169,7 @@ const BALL_DIAMETER = 23; // TODO: calculate based on tile size
 
 const Ball = ({ball}) => {
 	const location = pointInPlayground(ball.row, ball.column);
-	const dest = calculateDestination(ball);
+	const dest = applyDirection(ball);
 	const destination = pointInPlayground(dest.row, dest.column);
   const x = location.x + ball.progress * (destination.x - location.x) + X_SPACING / 2;
   const y = location.y + ball.progress * (destination.y - location.y) + Y_SPACING / 2;
