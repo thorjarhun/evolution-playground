@@ -1,10 +1,9 @@
-import { TICK, UPDATE_ANIMATION, MOVE_BALL } from '../actions/controls';
-import { ROWS, COLUMNS, BALL_COLLECTION_COLUMN, PENALTY_POINTS, SPEED, DIRECTION } from '../constants/game';
+import { TICK } from '../actions/controls';
+import { SPEED } from '../constants/game';
 import { nextState, generationObject, generateInitialPopulation } from '../lib/game';
 
 const defaultState = () => ({
   message: '',
-  boxesOn: false,
   labelsOn: false,
   gridOn: false,
   checkingIC: true,
@@ -12,32 +11,17 @@ const defaultState = () => ({
   speed: SPEED.MEDIUM,
   initialBallValue: 15,
   generation: 0,
-  paused: false, //true
-//  boxes: [],
   balls: [],
   individuals: generateInitialPopulation(),
   mStack: [generationObject()],
-  activeList: []
+	currentIndividual: 0
 });
-
-import { replaceAtIndex, augmenter, getInitialProgressIncrement, pointInPlayground } from '../lib/game';
 
 export default (state = defaultState(), action) => {
   switch (action.type) {
     case TICK:
       return nextState(state);
-	  /*
-	  case MOVE_BALL:
-		  const { index } = action;
-		  return dropBallEffectFn(state, index);
-		  /*
-		  return {
-			  ...state,
-			  balls: replaceAtIndex(balls, index, ball => 
-		  };
-		  */
     default:
       return state;
   }
 };
-

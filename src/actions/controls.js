@@ -30,54 +30,9 @@ export const reset = () => (dispatch, getState) => {
   }
   dispatch(resetAction());
 };
-/*
-const UPDATE_ANIMATION = 'UPDATE_ANIMATION';
-const updateAnimation = (objectType, index) => ({
-	type: UPDATE_ANIMATION,
-	objectType,
-	index
-});
 
-export const MOVE_BALL = 'MOVE_BALL';
-const moveBall = index => ({
-	type: 'MOVE_BALL',
-	index
-});
-
-export const tick = now => (dispatch, getState) => {
-	dispatch(updateFPS(now));
-	const {game} = getState();
-
-	if (game.balls.some(ball => !ball.dead)) {
-		return game.balls.forEach((ball, i) => {
-			if (!ball.dead) {
-				dispatch(moveBall(i))
-			}
-		});
-	}
-
-	dispatch(tickAction({
-		now: Date.now(),
-		frameId
-	}));
-};
-
-export const UPDATE_FPS = 'UPDATE_FPS';
-const updateFPS = now => ({
-	type: UPDATE_FPS,
-	frameId,
-	now
-});
-
-const tickAction = now => ({
-  type: TICK,
-  frameId,
-  now
-});
-*/
-export const tick = now => ({
-	type: TICK,
-	now
+export const tick = () => ({
+	type: TICK
 });
 
 export const toggleAutoplay = now => (dispatch, getState) => {
@@ -92,7 +47,7 @@ export const toggleAutoplay = now => (dispatch, getState) => {
 		try {
 			frameId = window.requestAnimationFrame(ticker);
 
-			dispatch(tick(Date.now()));
+			dispatch(tick());
 		} catch (e) {
 			console.error(e);
 			dispatch(stop());

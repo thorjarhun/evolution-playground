@@ -18,7 +18,7 @@ export default ({ state }) => {
         <rect x={topLeft.x} y={topLeft.y} width={X_SPACING*10+1} height={Y_SPACING*10+1} fill="url(#grid)" />
       }
       {
-        state.boxesOn &&
+	      state.labelsOn &&
         [(() => {
             const s = `${calculatePoints(state.balls)} pts`;
             const point = pointInPlayground(ROWS + 1, BALL_COLLECTION_COLUMN);

@@ -44,7 +44,7 @@ const advanceProgress = state => ({
 			? individual
 			: {
 			...individual,
-			progress: individual.progress + getInitialProgressIncrement(state.speed) / (individual.helper ? 10 : (individual.expandingGene || individual.shrinkingGene) ? 3 : 1)
+			progress: individual.progress + getInitialProgressIncrement(state.speed) / (individual.helper ? 10 : 3)
 		}
 	),
 	balls: state.balls.map(ball => ({
@@ -53,77 +53,127 @@ const advanceProgress = state => ({
 	}))
 });
 
+const PAUSE_DURATION = 0;
+
 export const nextState = state => {
-	const ANIMATIONS = [
-		{
-			test: state => state.delay,
-			reducer: augmenter({
-				delay: delay => delay - 1
-			})
-		},
-		{
-			test: state => state.balls.some(({row}) => row < ROWS),
-			reducer: advanceBalls
-		},
-		{
-			test: state => state.individuals.some(x => x.progress < 1),
-			reducer: state => state
-			/*
-			reducer: state => state.individuals.reduce((state, individual, i) =>
-					individual.progress < 1
-						? moveIndividualByIndex(state, i)
-						: state,
-				state)
-			*/
+	if (state.delay) {
+		return {
+			...state,
+			delay: state.delay - 1
+		};
+	}
+	state = advanceProgress(state);
+	
+	if (state.phase === 1) {
+	//	const currentIndividual = state.individuals.findIndex(individual => !individual.showFitness);
+		const individual = state.individuals[state.currentIndividual];
+		if (individual.progress < 1) {
+			return state;
 		}
-	];
-
-	if (!state.delay) {
-		state = advanceProgress(state);
+		if (!individual.showFitness) {
+			if (!state.gridOn) {
+				return {
+					...state,
+					gridOn: true,
+					delay: PAUSE_DURATION
+				};
+			}
+			if (!state.labelsOn) {
+				return {
+					...state,
+					labelsOn: true,
+					delay: PAUSE_DURATION
+				};
+			}
+			if (individual.destination !== individualInGamePoint()) {
+				return {
+					...state,
+					individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
+						...individual,
+						location: individual.destination,
+						destination: individualInGamePoint(),
+						progress: 0
+					})),
+					message: 'EVALUATE FITNESS',
+					boxes: loadDNA(state.individuals[state.currentIndividual].DNA)
+				};
+			}
+			if (!state.balls.length) {
+				return {
+					...state,
+					individuals: replaceAtIndex(state.individuals, state.currentIndividual, augmentWith({
+						visible: true
+					})),
+					balls: [createStartBall(state.speed, state.initialBallValue)]
+				};
+			}
+			if (state.balls.some(({row}) => row < ROWS)) {
+				return advanceBalls(state);
+			}
+			return {
+				...state,
+				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
+					...individual,
+					showFitness: true,
+					fitness: calculatePoints(state.balls) - individual.DNA.xs.length
+				})),
+				balls: []
+			};
+		} else if (individual.destination !== positionForIndividual(state.currentIndividual)) {
+			return {
+				...state,
+				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
+					...individual,
+					location: individual.destination,
+					destination: positionForIndividual(state.currentIndividual),
+					progress: 0
+				}))
+			};
+		} else if (state.currentIndividual < POPULATION_SIZE - 1) {
+			return {
+				...state,
+				currentIndividual: state.currentIndividual + 1
+			};
+		} else if (state.individuals.some((a, index) => state.individuals.slice(index).some(b => a.fitness < b.fitness))) {
+			return {
+				...state,
+				gridOn: false,
+				labelsOn: false,
+				message: 'SORT POPULATION',
+				individuals: sortOnFitness(state.individuals).map((individual, i) => ({
+					...individual,
+					location: individual.destination,
+					destination: positionForIndividual(i),
+					progress: 0
+				}))
+			};
+		} else if (state.usingThreshold && state.individuals[0].fitness > FITNESS_THRESHOLD) {
+			return {
+				...state,
+				message: 'DECREASE BALL VALUE', // TODO: Express this more prominently
+				initialBallValue: state.initialBallValue - 1,
+				currentIndividual: 0,
+				individuals: state.individuals.map(augmentWith({
+					showFitness: false
+				}))
+			};
+		} else {
+			return {
+				...state,
+				phase: 2
+			};
+		}
 	}
-
-	if (ANIMATIONS.some(({test}) => test(state))) {
-		return ANIMATIONS.find(({test}) => test(state)).reducer(state);
-	}
-
-	while (state.mStack.length && ANIMATIONS.every(({test}) => !test(state))) {
-		state = animationReducer({
+	
+	if (state.mStack.length && state.individuals.every(x => x.progress >= 1)) {
+		return animationReducer({
 			...state,
 			mStack: state.mStack.slice(0, -1)
 		}, state.mStack[state.mStack.length-1]);
 	}
 	return state;
 };
-/*
-const moveIndividualByIndex = (state, index) => {
-	const individual = {...state.individuals[index]};
-	if (individual.expandingGene || individual.shrinkingGene) {
-		console.assert(individual.expandingGene - individual.shrinkingGene);
-	} else {
-		if (individual.progress >= 1) {
-			individual.location = {
-				x: individual.destination.x,
-				y: individual.destination.y
-			};
-		}
-	}
-	return {
-		...state,
-		individuals: replaceAtIndex(state.individuals, index, () => individual)
-	};
-};
-const advanceIndividuals = (state, index) => ({
-	...state,
-	individuals: state.individuals.map(individual =>
-		individual.progress < 1 || individual.expandingGene || individual.shrinkingGene
-			? individual
-			: {
-				...individual,
-				location: individual.destination
-			}
-	)
-})
-*/
+
 const advanceBalls = state => ({
 	...state,
 	balls: state.balls.reduce((balls, ball, i) =>
@@ -155,7 +205,7 @@ const ballStepComplete = (state, index) => {
 	}));
 };
 
-const offsets = {
+const destinationByDirection = {
 	[DIRECTION.LEFT]: (row, column) => ({
 		row,
 		column: column - 1
@@ -170,7 +220,7 @@ const offsets = {
 	})
 };
 
-export const calculateDestination = ({row, column, direction}) => offsets[direction](row, column);
+export const calculateDestination = ({row, column, direction}) => destinationByDirection[direction](row, column);
 
 const getBoxType = (boxes, row, column) => {
 	if (row >= 0 && row < ROWS) {
@@ -267,17 +317,9 @@ const updaters = {
 };
 
 const GENERATION_OBJECT = 'GENERATION_OBJECT';
-const EVALUATE_FITNESS_OBJECT = 'EVALUATE_FITNESS_OBJECT';
-const SORT_ON_FITNESS_OBJECT = 'SORT_ON_FITNESS_OBJECT';
-const EVAL_INDIVUDUAL_OBJECT = 'EVAL_INDIVIDUAL_OBJECT';
 const PAUSE_OBJECT = 'PAUSE_OBJECT';
 const SET_STATE_OBJECT = 'SET_STATE_OBJECT';
-const MOVE_INDIVIDUAL_OBJECT = 'MOVE_INDIVIDUAL_OBJECT';
 const MOVE_INDIVIDUAL_BACK_HOME_OBJECT = 'MOVE_INDIVIDUAL_BACK_HOME_OBJECT';
-const CHECK_FOR_IC_OBJECT = 'CHECK_FOR_IC_OBJECT'; // TODO
-const ASSIGN_FITNESS_OBJECT = 'ASSIGN_FITNESS_OBJECT';
-const DRAW_INDIVIDUAL_OBJECT = 'DRAW_INDIVIDUAL_OBJECT';
-const CHECK_THRESHOLD_OBJECT = 'CHECK_THRESHOLD_OBJECT';
 const PURGE_OBJECT = 'PURGE_OBJECT';
 const CROSSOVER_OBJECT = 'CROSSOVER_OBJECT';
 const MUTATE_OBJECT = 'MUTATE_OBJECT';
@@ -294,14 +336,9 @@ const POINT_MUTATION_OBJECT = 'POINT_MUTATION_OBJECT';
 const EXPAND_GENE_OBJECT = 'EXPAND_GENE_OBJECT';
 
 export const generationObject = createActionCreator(GENERATION_OBJECT);
-const evaluateFitnessObject = createActionCreator(EVALUATE_FITNESS_OBJECT);
-const sortOnFitnessObject = createActionCreator(SORT_ON_FITNESS_OBJECT);
-const evalIndividualObject = createActionCreator(EVAL_INDIVUDUAL_OBJECT);
 const pauseObject = createActionCreator(PAUSE_OBJECT);
 const setStateObject = createActionCreator(SET_STATE_OBJECT, 'mutation');
 const moveIndividualBackHomeObject = createActionCreator(MOVE_INDIVIDUAL_BACK_HOME_OBJECT, 'index', 'showFitness');
-const checkForIcObject = createActionCreator(CHECK_FOR_IC_OBJECT, 'index');
-const checkThresholdObject = createActionCreator(CHECK_THRESHOLD_OBJECT);
 const purgeObject = createActionCreator(PURGE_OBJECT);
 const crossoverObject = createActionCreator(CROSSOVER_OBJECT, 'index', 'ppr');
 const mutateObject = createActionCreator(MUTATE_OBJECT, 'index', 'ppr');
@@ -330,78 +367,15 @@ const animationReducer = createReducer(null, {
 	[RUN_INDIVIDUAL]: (state, { index }) => state,
 	[RUN_ENDED]: state => state,
 	[BALL_DIED]: state => (state, { index }) => state,
-  [GENERATION_OBJECT]: augmenter({
-    generation: generation => generation + 1,
-    mStack: append(
+  [GENERATION_OBJECT]: state => ({
+	  ...state,
+    generation: state.generation + 1,
+	  phase: 1,
+	  currentIndividual: state.individuals.findIndex(individual => !individual.showFitness),
+	  mStack: state.mStack.concat(
       generationObject(),
-      purgeObject(),
-      checkThresholdObject(),
-      sortOnFitnessObject(),
-      evaluateFitnessObject())
+      purgeObject())
   }),
-	[EVALUATE_FITNESS_OBJECT]: state => ({
-		...state,
-		message: 'EVALUATE FITNESS',
-		mStack: state.mStack.concat(
-			setStateObject(augmentWith({
-				boxesOn: false,
-				gridOn: false,
-				labelsOn: false,
-				collectedPoints: 0
-			})),
-			range(POPULATION_SIZE).slice(state.generation === 1 ? 0 : parentPickRange(state.individuals))
-				.reverse()
-				.reduce((a, i) => a.concat(
-					evalIndividualObject(),
-					setStateObject(state => ({
-						...state,
-						currentIndividual: i
-					})),
-				), []),
-			setStateObject(augmenter({
-				collectedPoints: 0,
-				mStack: append(
-					setStateObject(augmentWith({boxesOn: true})),
-					pauseObject(),
-					setStateObject(augmentWith({labelsOn: true})),
-					pauseObject(),
-					setStateObject(augmentWith({gridOn: true}))
-				)
-			}))
-		)
-	}),
-	[EVAL_INDIVUDUAL_OBJECT]: state => ({
-		...state,
-		mStack: [...state.mStack,
-			moveIndividualBackHomeObject(state.currentIndividual, true),
-			checkForIcObject(state.currentIndividual),
-			setStateObject(state => ({
-				...state,
-				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
-					...individual,
-					showFitness: true,
-					fitness: calculatePoints(state.balls) - individual.DNA.xs.length
-				}))
-			})),
-			setStateObject(state => ({
-				...state,
-				individuals: replaceAtIndex(state.individuals, state.currentIndividual, augmentWith({
-					visible: true
-				})),
-				boxes: loadDNA(state.individuals[state.currentIndividual].DNA),
-				balls: [createStartBall(state.speed, state.initialBallValue)]
-			})),
-			setStateObject(state => ({
-				...state,
-				individuals: replaceAtIndex(state.individuals, state.currentIndividual, individual => ({
-					...individual,
-					location: individual.destination,
-					destination: individualInGamePoint(),
-					progress: 0
-				}))
-			}))
-		]
-	}),
   [PURGE_OBJECT]: state => {
     const ppr = parentPickRange(state.individuals);
     const parentIndices = range(POPULATION_SIZE).slice(ppr);
@@ -410,7 +384,7 @@ const animationReducer = createReducer(null, {
         showFitness: false,
         visible: false
       }))),
-      mStack: append(parentIndices.reduce((a, index) =>
+      mStack: append(parentIndices.reverse().reduce((a, index) =>
         a.concat(ppr > 1 && Math.random() < CROSSOVER_RATE ?
 	        crossoverObject(index, ppr) : mutateObject(index, ppr)), []))
     })(state)
@@ -497,7 +471,7 @@ const animationReducer = createReducer(null, {
         ...individuals[parent],
         visible: true,
         fitness: 0,
-	      location: individual.destination,
+	      location: individuals[parent].destination,
 	      destination: xoverChildPoint(),
         progress: 0,
         showFitness: false,
@@ -671,26 +645,6 @@ const animationReducer = createReducer(null, {
 	    DNA: DNA => removeGeneAtIndex(DNA, spot)
     }))
   }),
-  [CHECK_THRESHOLD_OBJECT]: state =>
-    state.usingThreshold && state.individuals[0].fitness > FITNESS_THRESHOLD ?
-	    {
-        ...state,
-        initialBallValue: state.initialBallValue - 1,
-        mStack: [...state.mStack,
-          checkThresholdObject(),
-          sortOnFitnessObject(),
-          evaluateFitnessObject(true)]
-      }
-      : state,
-  [SORT_ON_FITNESS_OBJECT]: augmenter({
-    message: 'SORT POPULATION',
-    individuals: individuals => sortOnFitness(individuals).map((individual, i) => ({
-	    ...individual,
-	    location: individual.destination,
-	    destination: positionForIndividual(i),
-	    progress: 0
-    }))
-  }),
   [SET_STATE_OBJECT]: (state, { mutation }) => mutation(state),
 /*
   [PAUSE_OBJECT]: state => ({
@@ -755,34 +709,31 @@ const sortOnFitness = individuals => [...individuals].sort((a,b) => b.fitness - 
 const createStartBall = (speed, initialBallValue) => ({
   row: -1,
   column: BALL_DROP_COLUMN,
-  destination: {
-	  row: 0,
-	  column: BALL_DROP_COLUMN
-  },
   value: initialBallValue,
   direction: DIRECTION.DOWN,
-  progress: speed === SPEED.FAST ? 1 : 0,
-  dead: false
+  progress: speed === SPEED.FAST ? 1 : 0
 });
 
-const individualInGamePoint = () => ({
+import { memoize } from 'ramda';
+
+const individualInGamePoint = memoize(() => ({
   x: pointInPlayground(0, 0).x,
   y: Math.floor(SVG_HEIGHT * 0.75)
-});
+}));
 
-const xoverParent1Point = () => ({
+const xoverParent1Point = memoize(() => ({
   x: pointInPlayground(0, 0).x,
   y: 0.05 * SVG_HEIGHT
-});
+}));
 
 const xoverParent2Point = individualInGamePoint;
 
-const xoverChildPoint = () => ({
+const xoverChildPoint = memoize(() => ({
   x: xoverParent1Point().x,
   y: (xoverParent1Point().y + xoverParent2Point().y) / 2
-});
+}));
 
-const positionForIndividual = index => {
+const positionForIndividual = memoize(index => {
   const ySpacing = SVG_HEIGHT * 2 / POPULATION_SIZE;
   if (index < POPULATION_SIZE / 2) {
     return {
@@ -794,7 +745,7 @@ const positionForIndividual = index => {
     x: SVG_WIDTH * 0.72,
     y: ySpacing * (index - POPULATION_SIZE / 2)
   };
-};
+});
 
 export const pointInPlayground = (row, column) => ({
   x: SVG_WIDTH / 4 + X_SPACING * (column + 1) - 2,
