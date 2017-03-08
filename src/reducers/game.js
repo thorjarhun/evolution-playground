@@ -13,8 +13,7 @@ const defaultState = () => ({
   generation: 0,
   balls: [],
   individuals: generateInitialPopulation(INITIAL_BALL_VALUE),
-  mStack: [generationObject()],
-	currentIndividual: 0
+  animationStack: [generationObject()]
 });
 
 export default (state = defaultState(), action) => {

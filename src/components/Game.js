@@ -1,6 +1,6 @@
 import React, { createElement } from 'react';
 import { ROWS, COLUMNS, SVG_WIDTH, SVG_HEIGHT, X_SPACING, Y_SPACING, BALL_DROP_COLUMN, BALL_COLLECTION_COLUMN } from '../constants/game';
-import { pointInPlayground, applyDirection, calculatePoints, boxSymbolByIndex } from '../lib/game';
+import { pointInPlayground, applyDirection, calculatePoints, BOX_SYMBOL_BY_INDEX } from '../lib/game';
 
 export default ({ state }) => {
   const topLeft = pointInPlayground(0, 0);
@@ -29,7 +29,7 @@ export default ({ state }) => {
           ...[...Array(ROWS).keys()].reduce((a, i) => {
             return [...a, ...[...Array(COLUMNS).keys()].map(j => {
               if (state.boxes && state.boxes[i][j]) {
-                return <Box key={`${i},${j}`} box={state.boxes[i][j]}/>;
+                return <Tile key={`${i},${j}`} tile={state.boxes[i][j]}/>;
               }
               return null;
             })];
@@ -75,7 +75,7 @@ export default ({ state }) => {
         })
       }
       {
-        state.balls.filter(ball => !ball.dead).map((ball, i) => {
+        state.balls.filter(ball => ball.row < ROWS).map((ball, i) => {
           return <Ball key={i} ball={ball}/>;
         })
       }
@@ -83,33 +83,39 @@ export default ({ state }) => {
   );
 };
 
+const stringifyEncoding = dna => dna.reduce((a,c) => ({
+	xs: a.xs + c.x,
+	ys: a.ys + c.y,
+	types: a.types + c.type
+}), { xs: '', ys: '', types: '' });
+
 const Individual = ({individual}) => {
   if (!individual.visible) {
     return null;
   }
+	const DNA = stringifyEncoding(individual.DNA);
   const result = [];
-  const niceT = individual.DNA.types.split('').map(x => x === ' ' ? x : 'ALRS'[x]);
-  var x1 = individual.DNA.xs,
+  var x1 = DNA.xs,
       x2 = '',
       x3 = '',
-      y1 = individual.DNA.ys,
+      y1 = DNA.ys,
       y2 = '',
       y3 = '',
-      t1 = niceT,
+      t1 = DNA.types.split('').map(x => x === ' ' ? x : BOX_SYMBOL_BY_INDEX[x]),
       t2 = '',
       t3 = '';
 
   const { modIndex, location, destination, progress, expandingGene, shrinkingGene } = individual;
   if (expandingGene || shrinkingGene) {
-    x1 = individual.DNA.xs.slice(0, modIndex);
-    x2 = individual.DNA.xs.slice(modIndex, modIndex + 1);
-    x3 = individual.DNA.xs.slice(modIndex + 1);
-    y1 = individual.DNA.ys.slice(0, modIndex);
-    y2 = individual.DNA.ys.slice(modIndex, modIndex + 1);
-    y3 = individual.DNA.ys.slice(modIndex + 1);
-    t1 = niceT.slice(0, modIndex);
-    t2 = niceT.slice(modIndex, modIndex + 1);
-    t3 = niceT.slice(modIndex + 1);
+    x3 = x1.slice(modIndex + 1);
+	  x2 = x1.slice(modIndex, modIndex + 1);
+	  x1 = x1.slice(0, modIndex);
+	  y3 = y1.slice(modIndex + 1);
+    y2 = y1.slice(modIndex, modIndex + 1);
+	  y1 = y1.slice(0, modIndex);
+	  t3 = t1.slice(modIndex + 1);
+	  t2 = t1.slice(modIndex, modIndex + 1);
+    t1 = t1.slice(0, modIndex);
   }
 
   const loc = {
@@ -150,16 +156,15 @@ const Individual = ({individual}) => {
   return <g>{result}</g>;
 };
 
-// TODO: Rename to Tile
-const Box = ({box}) => {
-	const s = boxSymbolByIndex(box.type);
+const Tile = ({tile}) => {
+	const s = BOX_SYMBOL_BY_INDEX[tile.type];
   const color = [
     'rgb(50,200,200)',
     'rgb(200,50,50)',
     'rgb(50,50,200)',
     'rgb(50,200,50)'
-  ][box.type];
-  const point = pointInPlayground(box.row, box.column);
+  ][tile.type];
+  const point = pointInPlayground(tile.row, tile.column);
   const x = point.x + X_SPACING / 2;
   const y = point.y + Y_SPACING / 2;
   return <text x={x} y={y} dy='0.3em' fontSize={18} fontFamily="sans-serif" fill={color} textAnchor="middle">{s}</text>;
