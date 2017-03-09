@@ -1,8 +1,9 @@
+import 'rxjs';
 import React from 'react';
 import { render } from 'react-dom';
 import { AppContainer } from 'react-hot-loader';
 import App from './containers/App';
-import configureStore from './store/configureStore';
+import configureStore from './configureStore';
 
 const store = configureStore();
 

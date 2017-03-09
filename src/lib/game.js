@@ -194,7 +194,7 @@ export const applyDirection = ball => ({
 	progress: 0
 });
 
-const advanceBall = (ball, boxes) => getTileEffect(getBoxType(boxes, ball.row, ball.column))(ball);
+export const advanceBall = (ball, boxes) => getTileEffect(getBoxType(boxes, ball.row, ball.column))(ball);
 
 const getTileEffect = boxType => updaters[boxType] || sendDown;
 
@@ -559,7 +559,7 @@ const EMPTY_GENE = {
 
 const sortOnFitness = individuals => [...individuals].sort((a,b) => b.fitness - a.fitness);
 
-const createStartBall = (speed, initialBallValue) => ({
+export const createStartBall = (speed, initialBallValue) => ({
   row: -1,
   column: BALL_DROP_COLUMN,
   value: initialBallValue,
@@ -569,7 +569,7 @@ const createStartBall = (speed, initialBallValue) => ({
 
 import { memoize } from 'ramda';
 
-const individualInGamePoint = memoize(() => ({
+export const individualInGamePoint = memoize(() => ({
   x: pointInPlayground(0, 0).x,
   y: Math.floor(SVG_HEIGHT * 0.75)
 }));
@@ -586,7 +586,7 @@ const xoverChildPoint = memoize(() => ({
   y: (xoverParent1Point().y + xoverParent2Point().y) / 2
 }));
 
-const positionForIndividual = memoize(index => {
+export const positionForIndividual = memoize(index => {
   const ySpacing = SVG_HEIGHT * 2 / POPULATION_SIZE;
   if (index < POPULATION_SIZE / 2) {
     return {
@@ -669,7 +669,7 @@ const parentPickRange = population => {
   return Math.min(last+1, Math.floor(population.length / 2));
 };
 
-const loadDNA = dna => {
+export const loadDNA = dna => {
   const boxes = range(ROWS).map(() => range(COLUMNS).map(() => null));
   dna.forEach(({x, y, type}) => {
     const row = +y;
