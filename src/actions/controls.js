@@ -35,6 +35,8 @@ export const tick = () => ({
 	type: TICK
 });
 
+import { Animator } from './../components/Game';
+
 export const toggleAutoplay = now => (dispatch, getState) => {
   const { profiler } = getState();
   if (profiler.startedAt) {
@@ -44,15 +46,19 @@ export const toggleAutoplay = now => (dispatch, getState) => {
   dispatch(start(now));
 
 	const ticker = () => {
-		try {
-			frameId = window.requestAnimationFrame(ticker);
+		//Animator.afterAnimation(() => {
+      try {
+        frameId = window.requestAnimationFrame(ticker);
 
-			dispatch(tick());
-		} catch (e) {
-			console.error(e);
-			dispatch(stop());
-			throw e;
-		}
+        if (!Animator.isAnimating()) {
+          dispatch(tick());
+        }
+      } catch (e) {
+        console.error(e);
+        dispatch(stop());
+        throw e;
+      }
+    //});
 	};
 	ticker();
 };

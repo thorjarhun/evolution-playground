@@ -39,6 +39,7 @@ import {
 // TODO: Obsolesce manually updating progress
 const advanceProgress = state => ({
 	...state,
+  /*
 	individuals: state.individuals.map(individual =>
 		individual.progress >= 1
 			? individual
@@ -47,6 +48,7 @@ const advanceProgress = state => ({
 			progress: individual.progress + getInitialProgressIncrement(state.speed) / (individual.helper ? 10 : 3)
 		}
 	),
+	*/
 	balls: state.balls.map(augmenter({
 		progress: progress => progress + getInitialProgressIncrement(state.speed)
 	}))
@@ -71,7 +73,7 @@ const tickPhase1 = state => {
 				delay: STANDARD_DELAY
 			};
 		}
-		if (state.individuals[currentIndividual].destination !== individualInGamePoint()) {
+		if (state.individuals[currentIndividual].location !== individualInGamePoint()) {
 			return {
 				...state,
 				message: 'EVALUATE FITNESS',
@@ -79,6 +81,7 @@ const tickPhase1 = state => {
 					...individual,
 					location: individual.destination,
 					destination: individualInGamePoint(),
+          visible: true,
 					progress: 0
 				})),
 				boxes: loadDNA(state.individuals[currentIndividual].DNA)
@@ -87,9 +90,11 @@ const tickPhase1 = state => {
 		if (!state.balls.length) {
 			return {
 				...state,
+        /*
 				individuals: replaceAtIndex(state.individuals, currentIndividual, augmentWith({
 					visible: true
 				})),
+				*/
 				balls: [createStartBall(state.speed, state.initialBallValue)]
 			};
 		}
@@ -104,7 +109,7 @@ const tickPhase1 = state => {
 			individuals: replaceAtIndex(state.individuals, currentIndividual, individual => ({
 				...individual,
 				showFitness: true,
-				fitness: calculatePoints(state.balls) - individual.DNA.length,
+				fitness: calculatePoints(state.balls, individual.DNA),
 				location: individual.destination,
 				destination: positionForIndividual(currentIndividual),
 				progress: 0
@@ -150,9 +155,9 @@ export const nextState = state => {
 		};
 	}
 
-	if (state.individuals.some(x => x.progress < 1) ||
+	if (//state.individuals.some(x => x.progress < 1) ||
 			state.balls.some(x => x.progress < 1)) {
-		return advanceProgress(state);
+		state = advanceProgress(state);
 	}
 
 	if (state.phase === 1) {
@@ -165,17 +170,27 @@ export const nextState = state => {
 	}, state.animationStack[state.animationStack.length-1]);
 };
 
-export const calculatePoints = balls => balls.filter(({row}) => row >= ROWS).map(ball =>
+export const calculatePoints = (balls, dna=[]) => balls.filter(({row}) => row >= ROWS).map(ball =>
 	ball.column === BALL_COLLECTION_COLUMN
 		? ball.value
 		: -PENALTY_POINTS
-).reduce(add, 0);
+).reduce(add, -dna.length);
 
 const add = (x, y) => x + y;
 
+const identity = x => x;
+
+// TODO: Rewrite more generically with compose and other HoF
+const conditional = (predicate, truthy, falsey=identity) =>
+  input =>
+    predicate(input)
+      ? (typeof truthy === 'function' ? truthy(input) : truthy)
+      : (typeof falsey === 'function' ? falsey(input) : falsey);
+
+// TODO: Give this some love/attention!
 const advanceBalls = (balls, boxes) =>
-	balls.map(applyDirection).reduce((balls, ball) =>
-		balls.concat(advanceBall(ball, boxes))
+	balls.map(conditional(ball => ball.progress >= 1, applyDirection)).reduce((balls, ball) =>
+		balls.concat(conditional(ball => ball.progress === 0, advanceBall(ball, boxes))(ball))
 		, []);
 
 export const applyDirection = ball => ({
@@ -287,25 +302,20 @@ const animationReducer = createReducer(null, {
         visible: false
       }))),
       animationStack: append(parentIndices.reverse().reduce((a, index) =>
-        a.concat(ppr > 1 && Math.random() < CROSSOVER_RATE ?
-	        crossoverObject(index, ppr) : mutateObject(index, ppr)), []))
+        a.concat(
+	        ppr > 1 && Math.random() < CROSSOVER_RATE ?
+	        crossoverObject(index, ppr)
+	        :
+          mutateObject(index, ppr)
+        ), []))
     })(state)
   },
   [DELETE_MUTATION_OBJECT]: (state, { index }) => {
     const spot = randomInt(0, state.individuals[index].DNA.length);
     return augmenter({
-      animationStack: append(
-        deleteMutationOperationObject(index, spot),
-        shrinkGeneObject(index, spot, 0, 30),
-        pauseObject(),
-        setStateObject(augmenter({
-          individuals: replaceIndex(index, augmenter({
-	          DNA: replaceIndex(spot, EMPTY_GENE)
-          }))
-        })),
-        pauseObject(),
-        expandGeneObject(index, spot, 12, 30)
-      )
+      individuals: replaceIndex(index, augmenter({
+        DNA: removeIndex(spot)
+      }))
     })(state);
   },
   [INSERT_MUTATION_OBJECT]: (state, { index }) => {
@@ -374,6 +384,8 @@ const animationReducer = createReducer(null, {
       message,
       individuals: individuals => replaceAtIndex(individuals, index, individual => ({
         ...individuals[parent],
+      //  id: base_id++, // TODO: This is really bad for several reasons, including tight coupling and because it is not redux-friendly!
+        id: Math.floor(Math.random()*1000),
         visible: true,
         fitness: 0,
 	      location: individuals[parent].destination,
@@ -383,13 +395,14 @@ const animationReducer = createReducer(null, {
         expandingGene: false,
         shrinkingGene: false,
         fromSize: 12,
-        toSize: 12
+        toSize: 12,
+      //  parent: individuals[parent]
       })),
 	    animationStack: append(nextObject(index))
     }));
 
 	  const parentDNALength = state.individuals[parent].DNA.length;
-	  if (Math.random() < 1/3 && parentDNALength > 1) {
+	  if (true || Math.random() < 1/3 && parentDNALength > 1) {
       animationStack.push(doMutation('DELETE MUTATION', deleteMutationObject));
     } else if (Math.random() < 0.5 && parentDNALength < 30) {
       animationStack.push(doMutation('INSERTION MUTATION', insertMutationObject));
@@ -403,29 +416,10 @@ const animationReducer = createReducer(null, {
     };
   },
   [PROCREATE]: (state, { index, parent1, parent2 }) => {
-	  const createMergeableDNA = (dna, flags, toggle) => dna.map((gene, i) =>
-	    toggle && flags[i] || !toggle && !flags[i]
-		    ? gene
-		    : EMPTY_GENE
-	  );
-
-	  const createHelper = (individual, location, flags, toggle) => ({
-		  ...individual,
-		  DNA: createMergeableDNA(individual.DNA, flags, toggle),
-		  location,
-		  destination: xoverChildPoint(),
-		  progress: 0,
-		  visible: true,
-		  helper: true
-	  });
-
     const [$parent1, $parent2] = [parent1, parent2].map(i => state.individuals[i]);
     const [p1len, p2len] = [$parent1, $parent2].map(p => p.DNA.length);
     const maxLength = Math.max(p1len, p2len);
     const flags = range(maxLength).map(() => Math.random() < 0.5);
-
-    const helper1 = createHelper($parent1, xoverParent1Point(), flags, false);
-	  const helper2 = createHelper($parent2, xoverParent2Point(), flags, true);
 
     return augmenter({
       individuals: individuals => replaceAtIndex(individuals, index, augmenter({
@@ -433,19 +427,23 @@ const animationReducer = createReducer(null, {
 	      destination: xoverChildPoint(),
         fitness: 0,
         showFitness: false,
-        visible: false,
+        visible: true,
         DNA: range(maxLength).map(i => {
 	        if (i < [p1len, p2len][+flags[i]]) {
 		        return [$parent1, $parent2][+flags[i]].DNA[i];
 	        }
 	        return EMPTY_GENE;
-        })
-      })).concat(helper1, helper2),
+        }),
+        parent1: $parent1,
+        parent2: $parent2
+      })),
+      /*
       animationStack: append(setStateObject(augmenter({
         individuals: individuals => replaceAtIndex(individuals.slice(0, -2), index, augmentWith({
           visible: true
         }))
       })))
+      */
     })(state);
   },
   [CROSSOVER_OBJECT]: (state, { index, ppr }) => {
@@ -458,11 +456,13 @@ const animationReducer = createReducer(null, {
 	      moveIndividualObject(index, positionForIndividual(index), false),
 			  moveIndividualObject(parent2, positionForIndividual(parent2), true),
 			  moveIndividualObject(parent1, positionForIndividual(parent1), true),
-			  removeSpacesObject(index),
+		//	  removeSpacesObject(index),
 			  setStateObject(augmenter({
 				  individuals: replaceIndex(index, individual => ({
 					  ...individual,
-					  shrinkingGene: individual.DNA.includes(EMPTY_GENE)
+		//			  shrinkingGene: individual.DNA.includes(EMPTY_GENE),
+            parent1: null,
+            parent2: null
 				  }))
 			  })),
 			  procreateObject(index, parent1, parent2),
@@ -537,13 +537,13 @@ const animationReducer = createReducer(null, {
 
 const isFunction = x => typeof x === 'function';
 
-export const replaceAtIndex = (xs, index, fn) => xs.slice(0, index).concat(isFunction(fn) ? fn(xs[index]) : fn, xs.slice(index+1));
-
-const replaceIndex = (i, fn) => xs => xs.slice(0, i).concat(isFunction(fn) ? fn(xs[i]) : fn, xs.slice(i + 1));
-
 const insertAtIndex = (xs, index, fn) => xs.slice(0, index).concat(isFunction(fn) ? fn(xs[index]) : fn, xs.slice(index));
 
+export const replaceAtIndex = (xs, index, fn) => xs.slice(0, index).concat(isFunction(fn) ? fn(xs[index]) : fn, xs.slice(index+1));
+const replaceIndex = (index, fn) => xs => xs.slice(0, index).concat(isFunction(fn) ? fn(xs[index]) : fn, xs.slice(index+1));
+
 const removeAtIndex = (xs, index) => xs.slice(0, index).concat(xs.slice(index+1));
+const removeIndex = index => xs => xs.slice(0, index).concat(xs.slice(index+1));
 
 const createGene = () => ({
 	x: randomInt(0, COLUMNS),
@@ -551,7 +551,7 @@ const createGene = () => ({
 	type: randomInt(0, 4)
 });
 
-const EMPTY_GENE = {
+export const EMPTY_GENE = {
 	x: ' ',
 	y: ' ',
 	type: ' '
@@ -620,12 +620,13 @@ const play = (dna, initialBallValue) => {
 	const boxes = loadDNA(dna);
 	var balls = [createStartBall(SPEED.FAST, initialBallValue)];
 	while (balls.some(({row}) => row < ROWS)) {
+    balls = balls.map(augmentWith({progress: 1}));
 		balls = advanceBalls(balls, boxes);
 	}
-	return calculatePoints(balls);
+	return calculatePoints(balls, dna);
 };
 
-const checkFitness = (dna, initialBallValue) => Math.max(0, play(dna, initialBallValue) - dna.length*2);
+const checkFitness = (dna, initialBallValue) => Math.max(0, play(dna, initialBallValue));
 /*
 const generateChromosomes = () => range(randomInt(10, INITIAL_GENOME_LENGTH)).map(() => ({
 	x: BALL_DROP_COLUMN + randomInt(-1, 3),
@@ -636,9 +637,11 @@ const generateChromosomes = () => range(randomInt(10, INITIAL_GENOME_LENGTH)).ma
 
 const generateChromosomes = () => range(randomInt(10, INITIAL_GENOME_LENGTH)).map(createGene);
 
+var base_id = 1;
 const generateIndividual = location => ({
+  id: base_id++,
 	DNA: generateChromosomes(),
-	location,
+	//location,
 	destination: location,
 	visible: false,
 	fitness: 0,
@@ -651,22 +654,31 @@ const generateIndividual = location => ({
 });
 
 export const generateInitialPopulation = initialBallValue => range(POPULATION_SIZE).map(i => {
-  const location = positionForIndividual(i);
+  const location = individualInGamePoint();//positionForIndividual(i);
 	var individual;
+  var i = 0;
 	do {
 		individual = generateIndividual(location);
+    if (++i > 100) {
+      console.log(`i === ${i}`);
+      break;
+    }
 	} while (!checkFitness(individual.DNA, initialBallValue));
 	return individual;
 });
+
+const individualIsIC = dna =>
+	checkFitness(dna) > 0 &&
+    range(dna.length).every(i => checkFitness(removeAtIndex(dna, i)) <= 0);
 
 // assumes population already sorted
 const parentPickRange = population => {
   var last = population.findIndex(individual => individual.fitness <= 0);
   if (last === -1) { // if none, keep first half of population anyway
-    return population.length / 2;
+    return Math.floor(population.length / 2);
   }
   // if more than half the population is viable, limit to top half
-  return Math.min(last+1, Math.floor(population.length / 2));
+  return Math.min(last, Math.floor(population.length / 2));
 };
 
 export const loadDNA = dna => {

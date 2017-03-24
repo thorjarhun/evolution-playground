@@ -16,12 +16,16 @@ render(
 
 if (module.hot) {
 	module.hot.accept('./containers/App', () => {
-		const NewApp = require('./containers/App').default;
-		render(
-			<AppContainer>
-				<NewApp store={store}/>
-			</AppContainer>,
-			document.getElementById('root')
-		)
+		try {
+			const NewApp = require('./containers/App').default;
+			render(
+				<AppContainer>
+					<NewApp store={store}/>
+				</AppContainer>,
+				document.getElementById('root')
+			)
+		} catch(e) {
+			console.error(e);
+		}
 	});
 }
