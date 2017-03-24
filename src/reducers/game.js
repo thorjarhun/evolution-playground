@@ -10,7 +10,7 @@ const defaultState = () => ({
   gridOn: false,
   checkingIC: true,
   usingThreshold: true,
-  speed: SPEED.MEDIUM,
+  speed: SPEED.FAST,
   initialBallValue: INITIAL_BALL_VALUE,
   generation: 0,
   balls: [],
@@ -77,7 +77,7 @@ export default (state = defaultState(), action) => {
 				  }
 				  return individual;
 			  }),
-			  balls: [createStartBall(state.speed, state.initialBallValue)]
+			  balls: [createStartBall(state.initialBallValue)]
 		  };
 	  case ADVANCE_BALL:
 		  return {

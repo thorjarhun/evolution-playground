@@ -1,4 +1,4 @@
-export const POPULATION_SIZE = 5;//20;
+export const POPULATION_SIZE = 20;//20;
 export const ROWS = 10;
 export const COLUMNS = 10;
 export const CROSSOVER_RATE = 0.2;

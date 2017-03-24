@@ -72,10 +72,6 @@ export default ({ state }) => {
       {
 	      state.individuals.length <= 20 && <Individuals individuals={state.individuals}/>
       }
-	    {/*
-		    state.individuals.length > 20 &&
-			    <Crossover parent1={state.individuals[1]} parent2={state.individuals[6]} child={state.individuals[7]} />
-	    */}
       {
         state.balls.filter(ball => ball.row < ROWS).map((ball, i) => {
           return <Ball key={i} ball={ball}/>;
@@ -121,19 +117,6 @@ const DURATION = 1000;
 // TODO: Rewrite top-level animations for individuals as D3 layout
 
 const updateIndividualD3 = (individual, model) => {
-/*
-  const translateX = function(d, i, j) {
-    debugger;
-    return `translate(${i*CHAR_WIDTH},0)`;
-  };
-  const childDNA = model.DNA.filter(gene => gene !== EMPTY_GENE);
-
-  const genes = individual
-    .selectAll('g')
-    .data(d3ifyDNA(childDNA), id);
-
-  genes.attr('transform', translateX);
-*/
   const fitness = individual
     .selectAll('svg:text')
     .data(d => model.showFitness ? [1] : [], d => d); // TODO: better pattern
@@ -162,6 +145,9 @@ const id = (() => {
 
 window.d3 = d3;
 
+const shallowEqual = (a,b) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(key => a[key] === b[key]);
+
+
 const updateD3 = (individual, model, oldDNA) => {
   const childDNA = model.DNA.filter(gene => gene !== EMPTY_GENE);
   const oldChildDNA = oldDNA.filter(gene => gene !== EMPTY_GENE);
@@ -176,7 +162,7 @@ const updateD3 = (individual, model, oldDNA) => {
 
   const swapThis = fn => (...args) => fn.call(...args);
   const unshiftThis = fn => function() { return fn.call(this, this, ...arguments); };
-  const addScale2 = unshiftThis(self => `${self.getAttribute('transform')} scale(2)`);
+  const addScale = unshiftThis(self => `${self.getAttribute('transform')} scale(2.5)`);
 
   const fill = (!model.showFitness || model.fitness > 0) ? 'black' : 'rgb(210,210,210)';
 
@@ -205,10 +191,10 @@ const updateD3 = (individual, model, oldDNA) => {
     //  .attr('y', (d,i) => i*CHAR_HEIGHT)
     .text(d => ''+d);
 
-  if (sizeChange) {
+  if (!shallowEqual(childDNA, oldChildDNA)) {
     const tran1 = genes
       .transition().duration(DURATION)
-      .attr('transform', (d, i) => `translate(${i*CHAR_WIDTH + (i < changeIndex ? 0 : sizeChange < 0 ? 2*CHAR_WIDTH : CHAR_WIDTH)},0)`);
+      .attr('transform', (d, i) => `translate(${i*CHAR_WIDTH + (i < changeIndex ? 0 : sizeChange < 0 ? 3*CHAR_WIDTH : 1.5*CHAR_WIDTH)},0)`);
 
     if (sizeChange < 0) {
       tran1
@@ -216,30 +202,49 @@ const updateD3 = (individual, model, oldDNA) => {
         .attr('transform', translateX);
     } else {
       tran1
-        .transition().duration(DURATION)
-        .attr('transform', (d, i) => `translate(${i*CHAR_WIDTH + (i < changeIndex ? 0 : CHAR_WIDTH)},0)`)
-        .transition().duration(DURATION)
+        .transition().delay(DURATION).duration(DURATION)
         .attr('transform', translateX);
     }
+    if (sizeChange) {
+      genes.exit()
+        .style('fill', 'red')
+        .transition().duration(DURATION)
+        .attr('transform', addScale)
+        .style('fill-opacity', 1)
+        .transition().duration(DURATION)
+        .style('fill-opacity', 0)
+        .remove();
 
-    newGenes
-      .attr('transform', addScale2)
-      .style('fill', 'green')
-      .style('fill-opacity', 0)
-      .transition().delay(DURATION).duration(DURATION)
-      .style('fill-opacity', 1)
-      .transition().duration(DURATION)
-      .attr('transform', translateX)
-      .style('fill', fill);
+      newGenes
+        .attr('transform', addScale)
+        .style('fill', 'green')
+        .style('fill-opacity', 0)
+        .transition().delay(DURATION).duration(DURATION)
+        .style('fill-opacity', 1)
+        .transition().duration(DURATION)
+        .attr('transform', translateX)
+        .style('fill', fill);
+    } else {
+      genes.exit()
+        .style('fill', 'blue')
+        .transition().duration(DURATION)
+        .attr('transform', addScale)
+    //    .style('fill-opacity', 1)
+        .transition().duration(DURATION)
+    //    .style('fill-opacity', 0)
+        .remove();
 
-    genes.exit()
-      .style('fill', 'red')
-      .transition().duration(DURATION)
-      .attr('transform', addScale2)
-      .style('fill-opacity', 1)
-      .transition().duration(DURATION)
-      .style('fill-opacity', 0)
-      .remove();
+      newGenes
+        .attr('transform', addScale)
+        .style('fill', 'blue')
+        .style('fill-opacity', 0)
+    //    .transition().delay(DURATION).duration(DURATION)
+        .transition().delay(2*DURATION).duration(0)
+        .style('fill-opacity', 1)
+        .transition().duration(DURATION)
+        .attr('transform', translateX)
+        .style('fill', fill);
+    }
   }
 };
 
@@ -275,11 +280,6 @@ const IndividualD3 = React.createClass({
       }
     }
   },
-  fixDNA(individual, model, oldDNA) {
-    console.log('fixDNA');
-    updateD3(individual, model, oldDNA || model.DNA);
-    this.animateFauxDOM(DURATION*6, Animator.animating(this));
-  },
   componentWillReceiveProps({model}) { // you bet it will
     if (this.props.model !== model) {
       console.log('props');
@@ -287,7 +287,9 @@ const IndividualD3 = React.createClass({
       updateIndividualD3(individual, model);
 
       if (this.props.model.DNA !== model.DNA) {
-        this.fixDNA(individual, model, this.props.model.DNA);
+        console.log('fixDNA');
+        updateD3(individual, model, this.props.model.DNA);
+        this.animateFauxDOM(DURATION*3, Animator.animating(this));
       } else {
         individual.transition()
           .duration(DURATION)
@@ -304,7 +306,6 @@ const IndividualD3 = React.createClass({
 
     const DNA = d3ifyDNA(model.DNA).filter(x => x.length);
 
-    const shallowEqual = (a,b) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(key => a[key] === b[key]);
 
     const translationBetween = (A, B) =>
       `translate(${B.x-A.x},${B.y-A.y})`;
@@ -416,12 +417,12 @@ const IndividualD3 = React.createClass({
     }
   },
   render() {
-    return <g>{this.state.animation}</g>;
+    return this.state.animation;
   }
 });
 
 export const Animator = (() => {
-  const animations = [];
+  var animations = [];
   const callbacks = [];
   return {
     animating: component => {
@@ -429,6 +430,7 @@ export const Animator = (() => {
       console.log('animating');
       return () => {
         animations.splice(animations.indexOf(component), 1);
+        animations = animations.filter(comp => comp.isAnimatingFauxDOM());
         if (!animations.length) {
           console.log('done');
           callbacks.forEach(callback => callback());
@@ -445,196 +447,6 @@ export const Animator = (() => {
     isAnimating: () => !!animations.length
   }
 })();
-
-const Crossover = React.createClass({
-	mixins: [
-		Faux.mixins.core,
-		Faux.mixins.anim
-	],
-	getInitialState() {
-		return {
-			animation: 'loading'
-		};
-	},
-	componentDidMount() {
-		const {parent1, parent2, child} = this.props;
-		const faux = d3.select(this.connectFauxDOM('g', 'animation'));
-
-    const childDNA = child.DNA.filter(gene => gene !== EMPTY_GENE);
-
-    const DNA = child.DNA.map(gene =>
-      gene === EMPTY_GENE
-        ? []
-        : [gene.x, gene.y, BOX_SYMBOL_BY_INDEX[gene.type]]
-    ).filter(x => x.length);
-
-    const shallowEqual = (a,b) => Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(key => a[key] === b[key]);
-
-    const translationBetween = (A, B) =>
-      `translate(${B.x-A.x},${B.y-A.y})`;
-
-    const individual = faux
-      .append('g')
-      .attr('transform', `translate(${child.destination.x},${child.destination.y})`);
-
-    const genes = individual
-      .style('font-family', 'monospace')
-      .selectAll('g')
-      .data(DNA)
-      .enter()
-      .append('g')
-      .attr('transform', (d, i, j) => {
-        const gene = childDNA[i];
-        var index = i;
-        while (true) {
-          if (index < parent1.DNA.length && shallowEqual(gene, parent1.DNA[index])) {
-            break;
-          }
-          if (index < parent2.DNA.length && shallowEqual(gene, parent2.DNA[index])) {
-            break;
-          }
-          if (index > 50) {
-            console.log('opps');
-            break;
-          }
-          index++;
-        }
-        const x = (index - i)*CHAR_WIDTH;
-        if (index < parent1.DNA.length && shallowEqual(gene, parent1.DNA[index])) {
-          return `translate(${x},${parent1.destination.y-child.destination.y})`;
-        }
-        return `translate(${x},${parent2.destination.y-child.destination.y})`;
-/*
-        if (i < parent1.DNA.length && shallowEqual(child.DNA[i], parent1.DNA[i])) {
-          return translationBetween(child.destination, parent1.destination);
-        }
-        return translationBetween(child.destination, parent2.destination);
-        */
-      });
-
-    genes
-      .selectAll('text')
-      .data(d => d)
-      .enter()
-      .append('text')
-      .attr('x', (d, i, j) => {
-        const parentNode = j[i].parentNode;
-        const k = [].indexOf.call(parentNode.parentNode.childNodes, parentNode);
-        return k*CHAR_WIDTH;
-      })
-      .attr('y', (d,i) => i*CHAR_HEIGHT)
-      .text(d => ''+d);
-
-    const t = d3.transition()
-      .duration(10000)
-      .ease(d3.easeCubicIn)
-      .on('end', () => {
-        //dispatch(animateChild())
-      });
-
-    genes.transition()
-      .duration(DURATION)
-      .attr('transform', 'translate(0,0)');
-
-    /*
-		const DNA1 = parent1.DNA.map((gene,i) => {
-			if (shallowEqual(gene, child.DNA[i])) {
-				return [gene.x, gene.y, BOX_SYMBOL_BY_INDEX[gene.type]];
-			}
-			return [];
-		});
-
-		const DNA2 = parent2.DNA.map((gene,i) => {
-			if (i >= DNA1.length && shallowEqual(gene, child.DNA[i]) || DNA1[i].length === 0) {
-				return [gene.x, gene.y, BOX_SYMBOL_BY_INDEX[gene.type]];
-			}
-			return [];
-		});
-		*/
-		this.animateFauxDOM(DURATION/2);
-	},
-	render() {
-		return <g>{this.state.animation}</g>;
-	}
-});
-
-const stringifyEncoding = dna => dna.reduce((a,c) => ({
-	xs: a.xs + c.x,
-	ys: a.ys + c.y,
-	types: a.types + c.type
-}), { xs: '', ys: '', types: '' });
-
-const Individual = ({individual}) => {
-  if (individual.parent1) {
-    if (individual.parent2) {
-      return <Crossover parent1={individual.parent1} parent2={individual.parent2} child={individual} />;
-    }
-  }
-  if (!individual.visible) {
-    return null;
-  }
-	const DNA = stringifyEncoding(individual.DNA);
-  const result = [];
-  var x1 = DNA.xs,
-      x2 = '',
-      x3 = '',
-      y1 = DNA.ys,
-      y2 = '',
-      y3 = '',
-      t1 = DNA.types.split('').map(x => x === ' ' ? x : BOX_SYMBOL_BY_INDEX[x]),
-      t2 = '',
-      t3 = '';
-
-  const { modIndex, location, destination, progress, expandingGene, shrinkingGene } = individual;
-  if (expandingGene || shrinkingGene) {
-    x3 = x1.slice(modIndex + 1);
-	  x2 = x1.slice(modIndex, modIndex + 1);
-	  x1 = x1.slice(0, modIndex);
-	  y3 = y1.slice(modIndex + 1);
-    y2 = y1.slice(modIndex, modIndex + 1);
-	  y1 = y1.slice(0, modIndex);
-	  t3 = t1.slice(modIndex + 1);
-	  t2 = t1.slice(modIndex, modIndex + 1);
-    t1 = t1.slice(0, modIndex);
-  }
-
-  const loc = {
-    x: location.x + progress * (destination.x - location.x),
-    y: location.y + progress * (destination.y - location.y)
-  };
-
-  const color = (!individual.showFitness || individual.fitness > 0) ? 'black' : 'rgb(210,210,210)';
-  result.push(<text key={1} x={loc.x} y={loc.y} dy='0em' fontSize={14} fontFamily="monospace" fill={color} style={{whiteSpace: 'pre'}}>{x1}</text>);
-  result.push(<text key={2} x={loc.x} y={loc.y} dy='1em' fontSize={14} fontFamily="monospace" fill={color} style={{whiteSpace: 'pre'}}>{y1}</text>);
-  result.push(<text key={3} x={loc.x} y={loc.y} dy='2em' fontSize={14} fontFamily="monospace" fill={color} style={{whiteSpace: 'pre'}}>{t1}</text>);
-  if (expandingGene || shrinkingGene) {
-	  const temp = expandingGene ? individual.progress : (1 - individual.progress);
-	  const bigFontSize = individual.fromSize + temp * (individual.toSize - individual.fromSize);
-
-	  const CHAR_WIDTH = 7;
-	  let x = loc.x + CHAR_WIDTH * (x1.length + temp);
-	  result.push(<text key={5} x={x} y={loc.y} dy='0em' fontSize={bigFontSize} fontFamily='monospace'
-	                    fontWeight='bold'>{x2}</text>);
-	  result.push(<text key={6} x={x} y={loc.y} dy='1em' fontSize={bigFontSize} fontFamily='monospace'
-	                    fontWeight='bold'>{y2}</text>);
-	  result.push(<text key={7} x={x} y={loc.y} dy='2em' fontSize={bigFontSize} fontFamily='monospace'
-	                    fontWeight='bold'>{t2}</text>);
-	  var shift = x1.length;
-	  if (expandingGene) {
-		  shift += +!!individual.fromSize + 2*individual.progress;
-	  } else {
-		  shift += +!!individual.toSize + (+!!individual.fromSize - individual.progress)
-	  }
-    x = loc.x + shift * CHAR_WIDTH;
-    result.push(<text key={8} x={x} y={loc.y} dy='0em' fontSize={14} fontFamily='monospace'>{x3}</text>);
-    result.push(<text key={9} x={x} y={loc.y} dy='1em' fontSize={14} fontFamily='monospace'>{y3}</text>);
-    result.push(<text key={10} x={x} y={loc.y} dy='2em' fontSize={14} fontFamily='monospace'>{t3}</text>);
-  }
-  if (individual.showFitness) {
-    result.push(<text key={4} x={loc.x} y={loc.y} dy='3em' fontSize={14} fontFamily="monospace" fill='rgb(30,150,30)'>{`Fitness: ${individual.fitness}`}</text>);
-  }
-  return <g>{result}</g>;
-};
 
 const Tile = ({tile}) => {
 	const s = BOX_SYMBOL_BY_INDEX[tile.type];
