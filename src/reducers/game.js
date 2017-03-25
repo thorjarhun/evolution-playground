@@ -4,6 +4,9 @@ import { nextState, generationObject, generateInitialPopulation, loadDNA, create
 
 import { MOVE_INDIVIDUAL, SHOW_GRID, SHOW_LABELS, START_RUN, DROP_BALL, ADVANCE_BALL, MOVE_BALL } from '../epics/game';
 
+import undoable from 'redux-undo';
+
+
 const defaultState = () => ({
   message: '',
   labelsOn: false,
@@ -18,7 +21,7 @@ const defaultState = () => ({
   animationStack: [generationObject()]
 });
 
-export default (state = defaultState(), action) => {
+export default undoable((state = defaultState(), action) => {
   switch (action.type) {
 	  case MOVE_INDIVIDUAL:
 		  const {index, location} = action.payload;
@@ -91,4 +94,4 @@ export default (state = defaultState(), action) => {
     default:
       return state;
   }
-};
+});

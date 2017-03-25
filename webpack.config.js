@@ -21,11 +21,17 @@ module.exports = {
 		new webpack.NoEmitOnErrorsPlugin()
 	],
 	module: {
-		rules: [{
-			test: /\.jsx?$/,
-			use: ['babel-loader'],
-			exclude: /node_modules/
-		}]
+		rules: [
+      {
+			  test: /\.jsx?$/,
+			  use: ['babel-loader'],
+			  exclude: /node_modules/
+		  },
+      {
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader']
+      }
+    ]
 	},
 	devServer: {
 		host: 'localhost',
