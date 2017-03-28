@@ -18,7 +18,7 @@ export default ({ state }) => {
         <rect x={topLeft.x} y={topLeft.y} width={X_SPACING*10+1} height={Y_SPACING*10+1} fill="url(#grid)" />
       }
       {
-	      state.labelsOn &&
+        state.labelsOn &&
         [(() => {
             const s = `${calculatePoints(state.balls)} pts`;
             const point = pointInPlayground(ROWS + 1, BALL_COLLECTION_COLUMN);
@@ -70,7 +70,7 @@ export default ({ state }) => {
         <text key="message" x={pointInPlayground(0,0).x} y={SVG_HEIGHT * 0.9} fontSize={30} fontFamily="sans-serif">{state.message}</text>
       }
       {
-	      state.individuals.length <= 20 && <Individuals individuals={state.individuals}/>
+        state.individuals.length <= 20 && <Individuals individuals={state.individuals}/>
       }
       {
         state.balls.filter(ball => ball.row < ROWS).map((ball, i) => {
@@ -449,7 +449,7 @@ export const Animator = (() => {
 })();
 
 const Tile = ({tile}) => {
-	const s = BOX_SYMBOL_BY_INDEX[tile.type];
+  const s = BOX_SYMBOL_BY_INDEX[tile.type];
   const color = [
     'rgb(50,200,200)',
     'rgb(200,50,50)',
@@ -465,17 +465,17 @@ const Tile = ({tile}) => {
 const BALL_DIAMETER = 23; // TODO: calculate based on tile size
 
 const Ball = ({ball}) => {
-	var x, y;
-	if (ball.location) {
-		x = ball.location.x;
-		y = ball.location.y;
-	} else {
-		const location = pointInPlayground(ball.row, ball.column);
-		const dest = applyDirection(ball);
-		const destination = pointInPlayground(dest.row, dest.column);
-		x = location.x + ball.progress * (destination.x - location.x) + X_SPACING / 2;
-		y = location.y + ball.progress * (destination.y - location.y) + Y_SPACING / 2;
-	}
+  var x, y;
+  if (ball.location) {
+    x = ball.location.x;
+    y = ball.location.y;
+  } else {
+    const location = pointInPlayground(ball.row, ball.column);
+    const dest = applyDirection(ball);
+    const destination = pointInPlayground(dest.row, dest.column);
+    x = location.x + ball.progress * (destination.x - location.x) + X_SPACING / 2;
+    y = location.y + ball.progress * (destination.y - location.y) + Y_SPACING / 2;
+  }
   return (
     <g>
       <circle cx={x} cy={y} r={BALL_DIAMETER / 2} fill="rgb(255, 215, 0)" stroke="blue"/>

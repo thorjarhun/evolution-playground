@@ -18,6 +18,6 @@ const App = connect(
 );
 
 export default ({store}) =>
-	<Provider store={store}>
-		<App/>
-	</Provider>;
+  <Provider store={store}>
+    <App/>
+  </Provider>;

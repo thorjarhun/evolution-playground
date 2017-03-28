@@ -31,9 +31,9 @@ export default connect(
 );
 
 const calculateFrameRate = (ticks, startedAt, now) =>
-	startedAt
-		? Math.ceil(ticks / ((now - startedAt) / 1000))
-		: null;
+  startedAt
+    ? Math.ceil(ticks / ((now - startedAt) / 1000))
+    : null;
 
 const ToggleButton = ({
     on,

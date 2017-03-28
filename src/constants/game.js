@@ -14,12 +14,12 @@ export const FITNESS_THRESHOLD = 50;
 export const INITIAL_BALL_VALUE = 15;
 
 export const SPEED = {
-	SLOW: 'SLOW',
-	MEDIUM: 'MEDIUM',
-	FAST: 'FAST'
+  SLOW: 'SLOW',
+  MEDIUM: 'MEDIUM',
+  FAST: 'FAST'
 };
 export const DIRECTION = {
-	DOWN: 'DOWN',
-	LEFT: 'LEFT',
-	RIGHT: 'RIGHT'
+  DOWN: 'DOWN',
+  LEFT: 'LEFT',
+  RIGHT: 'RIGHT'
 };

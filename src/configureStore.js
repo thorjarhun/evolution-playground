@@ -7,14 +7,14 @@ import rootReducer from './reducers';
 //const epicMiddleware = createEpicMiddleware(rootEpic);
 
 export default initialState => {
-	const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
+  const composeEnhancers = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
   const store = createStore(
     rootReducer,
     initialState,
     composeEnhancers(
-	    applyMiddleware(
-	  //    epicMiddleware,
-	      thunkMiddleware
+      applyMiddleware(
+    //    epicMiddleware,
+        thunkMiddleware
       )
     )
   );
@@ -24,10 +24,10 @@ export default initialState => {
       store.replaceReducer(require('./reducers').default);
     });
     /*
-	  module.hot.accept('./epics', () => {
-		  epicMiddleware.replaceEpic(require('./epics').default);
-	  });
-	  */
+    module.hot.accept('./epics', () => {
+      epicMiddleware.replaceEpic(require('./epics').default);
+    });
+    */
   }
   return store;
 };

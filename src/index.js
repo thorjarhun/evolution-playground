@@ -8,24 +8,24 @@ import configureStore from './configureStore';
 const store = configureStore();
 
 render(
-	<AppContainer>
-		<App store={store}/>
-	</AppContainer>,
-	document.getElementById('root')
+  <AppContainer>
+    <App store={store}/>
+  </AppContainer>,
+  document.getElementById('root')
 );
 
 if (module.hot) {
-	module.hot.accept('./containers/App', () => {
-		try {
-			const NewApp = require('./containers/App').default;
-			render(
-				<AppContainer>
-					<NewApp store={store}/>
-				</AppContainer>,
-				document.getElementById('root')
-			)
-		} catch(e) {
-			console.error(e);
-		}
-	});
+  module.hot.accept('./containers/App', () => {
+    try {
+      const NewApp = require('./containers/App').default;
+      render(
+        <AppContainer>
+          <NewApp store={store}/>
+        </AppContainer>,
+        document.getElementById('root')
+      )
+    } catch(e) {
+      console.error(e);
+    }
+  });
 }

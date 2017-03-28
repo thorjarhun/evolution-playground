@@ -32,7 +32,7 @@ export const reset = () => (dispatch, getState) => {
 };
 
 export const tick = () => ({
-	type: TICK
+  type: TICK
 });
 
 import { Animator } from './../components/Game';
@@ -45,8 +45,8 @@ export const toggleAutoplay = now => (dispatch, getState) => {
 
   dispatch(start(now));
 
-	const ticker = () => {
-		//Animator.afterAnimation(() => {
+  const ticker = () => {
+    //Animator.afterAnimation(() => {
       try {
         frameId = window.requestAnimationFrame(ticker);
 
@@ -59,6 +59,6 @@ export const toggleAutoplay = now => (dispatch, getState) => {
         throw e;
       }
     //});
-	};
-	ticker();
+  };
+  ticker();
 };
