@@ -1,12 +1,13 @@
 import React from 'react';
 import { Provider } from 'react-redux';
 import { connect } from 'react-redux';
-import Controls from '../components/Controls';
-import Game from '../components/Game';
-import UndoRedo from '../components/UndoRedo';
+import Controls from './Controls';
+import Game from './Game';
+import UndoRedo from './UndoRedo';
+import { selectGame } from '../selectors';
 
 const App = connect(
-  state => ({ game: state.game.present })
+  state => ({ game: selectGame(state) })
 )(({game}) =>
   <div>
     <Controls />

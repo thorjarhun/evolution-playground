@@ -151,7 +151,7 @@ export const dropBall$ = (action$, store) => {
         Rx.Observable.of(advanceBall(index))
       );
     })
-}
+};
 
 
 export const startRun$ = action$ =>
@@ -220,8 +220,7 @@ export const startGame$ = action$ =>
   border-radius: 2rem;
   transform:
     translateX(calc(var(--ball-x) * 1px))
-  translateY(calc(var(--ball-y) * 1px))
-  ;
+    translateY(calc(var(--ball-y) * 1px));
 }
 
 body, html {

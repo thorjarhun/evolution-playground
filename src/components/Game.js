@@ -1,6 +1,8 @@
-import React, { createElement } from 'react';
+import React from 'react';
 import { ROWS, COLUMNS, SVG_WIDTH, SVG_HEIGHT, X_SPACING, Y_SPACING, BALL_DROP_COLUMN, BALL_COLLECTION_COLUMN } from '../constants/game';
-import { pointInPlayground, applyDirection, calculatePoints, BOX_SYMBOL_BY_INDEX, EMPTY_GENE } from '../lib/game';
+import { pointInPlayground, calculatePoints, BOX_SYMBOL_BY_INDEX, EMPTY_GENE } from '../lib/game';
+import Tile from './Tile';
+import Ball from './Ball';
 
 export default ({ state }) => {
   const topLeft = pointInPlayground(0, 0);
@@ -82,14 +84,13 @@ export default ({ state }) => {
 };
 
 const Individuals = React.createClass({
-
   render() {
     const {individuals} = this.props;
     return (
       <g>
         {
-          individuals.map(individual =>
-            individual.visible && <IndividualD3 key={individual.id} model={individual}/>
+          individuals.filter(individual => individual.visible).map(
+            individual => <IndividualD3 key={individual.id} model={individual}/>
           )
         }
       </g>
@@ -115,21 +116,6 @@ const d3ifyDNA = dna => dna.map(d3ifyGene);
 const DURATION = 1000;
 
 // TODO: Rewrite top-level animations for individuals as D3 layout
-
-const updateIndividualD3 = (individual, model) => {
-  const fitness = individual
-    .selectAll('svg:text')
-    .data(d => model.showFitness ? [1] : [], d => d); // TODO: better pattern
-
-  fitness.enter()
-    .append('svg:text')
-    .attr('fill', 'rgb(30,150,30)')
-  //  .attr('y', 3*CHAR_HEIGHT)
-    .attr('dy', 3+'em')
-    .text(`Fitness: ${model.fitness}`);
-
-  fitness.exit().remove();
-};
 
 
 const id = (() => {
@@ -248,6 +234,21 @@ const updateD3 = (individual, model, oldDNA) => {
   }
 };
 
+const updateIndividualD3 = (individual, model) => {
+  const fitness = individual
+    .selectAll('svg:text')
+    .data(d => model.showFitness ? [model.fitness] : [], d => d); // TODO: better pattern
+
+  fitness.enter()
+    .append('svg:text')
+    .attr('fill', 'rgb(30,150,30)')
+    //  .attr('y', 3*CHAR_HEIGHT)
+    .attr('dy', 3+'em')
+    .text(`Fitness: ${model.fitness}`);
+
+  fitness.exit().remove();
+};
+
 const IndividualD3 = React.createClass({
   getInitialState() {
     return {
@@ -257,7 +258,9 @@ const IndividualD3 = React.createClass({
   },
   componentDidMount() {
     const { model } = this.props;
-    const individual = d3.select(this.connectFauxDOM('g', 'animation'))
+    this.connectedFauxDOM.animation = new Faux.Element('g');
+    setTimeout(() => this.drawFauxDOM());
+    const individual = d3.select(this.connectedFauxDOM.animation)
       .attr('transform', `translate(${model.location.x},${model.location.y})`)
       .style('font-family', 'monospace');
 
@@ -378,11 +381,6 @@ const IndividualD3 = React.createClass({
     this.connectedFauxDOM = {};
     this.animateFauxDOMUntil = 0;
   },
-  connectFauxDOM(node, name) {
-    this.connectedFauxDOM[name] = typeof node !== 'string' ? node : new Faux.Element(node);
-    setTimeout(() => this.drawFauxDOM());
-    return this.connectedFauxDOM[name];
-  },
   drawFauxDOM() {
     this.setState({
       animation: this.connectedFauxDOM.animation.toReact()
@@ -430,10 +428,14 @@ export const Animator = (() => {
       console.log('animating');
       return () => {
         animations.splice(animations.indexOf(component), 1);
-        animations = animations.filter(comp => comp.isAnimatingFauxDOM());
+        //animations = animations.filter(comp => comp.isAnimatingFauxDOM());
         if (!animations.length) {
           console.log('done');
           callbacks.forEach(callback => callback());
+        } else {
+          if (animations.some(comp => !comp.isAnimatingFauxDOM())) {
+            debugger;
+          }
         }
       };
     },
@@ -447,39 +449,3 @@ export const Animator = (() => {
     isAnimating: () => !!animations.length
   }
 })();
-
-const Tile = ({tile}) => {
-  const s = BOX_SYMBOL_BY_INDEX[tile.type];
-  const color = [
-    'rgb(50,200,200)',
-    'rgb(200,50,50)',
-    'rgb(50,50,200)',
-    'rgb(50,200,50)'
-  ][tile.type];
-  const point = pointInPlayground(tile.row, tile.column);
-  const x = point.x + X_SPACING / 2;
-  const y = point.y + Y_SPACING / 2;
-  return <text x={x} y={y} dy='0.3em' fontSize={18} fontFamily="sans-serif" fill={color} textAnchor="middle">{s}</text>;
-};
-
-const BALL_DIAMETER = 23; // TODO: calculate based on tile size
-
-const Ball = ({ball}) => {
-  var x, y;
-  if (ball.location) {
-    x = ball.location.x;
-    y = ball.location.y;
-  } else {
-    const location = pointInPlayground(ball.row, ball.column);
-    const dest = applyDirection(ball);
-    const destination = pointInPlayground(dest.row, dest.column);
-    x = location.x + ball.progress * (destination.x - location.x) + X_SPACING / 2;
-    y = location.y + ball.progress * (destination.y - location.y) + Y_SPACING / 2;
-  }
-  return (
-    <g>
-      <circle cx={x} cy={y} r={BALL_DIAMETER / 2} fill="rgb(255, 215, 0)" stroke="blue"/>
-      <text x={x} y={y} fontSize={20} fontFamily="serif" textAnchor="middle" alignmentBaseline="middle">{ball.value}</text>
-    </g>
-  );
-};

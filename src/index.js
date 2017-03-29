@@ -3,7 +3,7 @@ import React from 'react';
 import { render } from 'react-dom';
 import { AppContainer } from 'react-hot-loader';
 import 'rc-slider/assets/index.css';
-import App from './containers/App';
+import App from './components/index';
 import configureStore from './configureStore';
 const store = configureStore();
 
@@ -15,9 +15,9 @@ render(
 );
 
 if (module.hot) {
-  module.hot.accept('./containers/App', () => {
+  module.hot.accept('./components/index', () => {
     try {
-      const NewApp = require('./containers/App').default;
+      const NewApp = require('./components/index').default;
       render(
         <AppContainer>
           <NewApp store={store}/>
